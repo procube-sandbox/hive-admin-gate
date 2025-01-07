@@ -1,0 +1,16 @@
+---
+domain: "{{ domain }}"
+hive_stage: "{{ hive_stage }}"
+hive_name: "{{ hive_name }}"
+first_hive: "{{ groups['first_hive'] | intersect(groups[hive_stage]) | first }}"
+db_password: "{{ db_password }}"
+failedCountLimitByUserid: "{{ failedCountLimitByUserid }}"
+failedCountLimitBySrcIPAddr: "{{ failedCountLimitBySrcIPAddr }}"
+expireSeconds: "{{ expireSeconds }}"
+ipWhiteList: "{{ ipWhiteList }}"
+dn_suffix: "{{ dn_suffix }}"
+pwAvailableDays: "{{ pwAvailableDays }}"
+
+saml_cert: "{{ saml_cert }}"
+saml_key: "{{ saml_key }}"
+saml_sps_wg: "{{ saml_sps_wg }}"

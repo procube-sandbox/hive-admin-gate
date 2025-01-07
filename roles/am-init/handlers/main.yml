@@ -1,0 +1,4 @@
+- name: restart wildfly
+  shell: |
+    systemctl restart wildfly
+  listen: wildfly configured

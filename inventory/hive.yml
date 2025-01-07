@@ -1,0 +1,55 @@
+plugin: hive_inventory
+  #name: ag-demo
+name: admin-gate
+stages:
+  private:
+    provider: vagrant
+    separate_repository: False
+    cidr: 192.168.208.0/24
+    memory_size: 6000
+    disk_size: 60
+    mirrored_disk_size: 50
+  staging:
+    provider: aws
+    image_name: ami-0c02144aaa772139c
+      #number_of_hosts: 1
+    cidr: 192.168.0.0/24
+    region: ap-northeast-1
+    disk_size: 100
+    mirrored_disk_size: 80
+    instance_type: t3.large
+    repository_instance_type: t3.large
+    repository_disk_size: 300
+    subnets:
+    - cidr: 192.168.0.0/26
+      name: subnet-a
+      available_zone: ap-northeast-1a
+    - cidr: 192.168.0.64/26
+      name: subnet-b
+      available_zone: ap-northeast-1d
+    - cidr: 192.168.0.128/26
+      name: subnet-c
+      available_zone: ap-northeast-1c
+  production:
+    provider: aws
+    image_name: ami-0c02144aaa772139c
+    separate_repository: False
+    number_of_hosts: 1
+    cidr: 192.168.0.0/24
+    region: ap-northeast-1
+    disk_size: 15
+    mirrored_disk_size: 20
+    instance_type: t3.large
+    repository_instance_type: t3.large
+    repository_disk_size: 50
+    subnets:
+    - cidr: 192.168.0.0/26
+      name: subnet-a
+      available_zone: ap-northeast-1b
+    - cidr: 192.168.0.64/26
+      name: subnet-b
+      available_zone: ap-northeast-1d
+    - cidr: 192.168.0.128/26
+      name: subnet-c
+      available_zone: ap-northeast-1c
+

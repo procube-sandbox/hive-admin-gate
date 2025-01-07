@@ -1,0 +1,40 @@
+---
+# This role contains common setup for NetSoarer products.
+
+# - name: transfer NSSDC Repository installer
+#   unarchive:
+#     src: files/clientCrt.tar.gz
+#     dest: /root/
+#     owner: root
+#     group: root
+#     mode: 0644
+
+- name: put NSSDC Repository
+  copy:
+    src: nssdc.repo
+    dest: "/etc/yum.repos.d/nssdc.repo"
+- name: "put NSSDC client certificate"
+  copy:
+    content: "{{ credentials.nssdc_client_cert }}"
+    dest: "/etc/pki/tls/certs/nssdc-client.crt"
+    mode: 0644
+- name: "put NSSDC client key"
+  copy:
+    content: "{{ credentials.nssdc_client_key }}"
+    dest: "/etc/pki/tls/private/nssdc-client.key"
+    mode: 0644
+# - name: "put intermidiate cert"
+#   copy:
+#     src: sf_bundle-g2.crt
+#     dest: "/etc/pki/tls/certs/"
+#     mode: 0644
+- name: install NSSDC Developper Repository
+  # get_url:
+  #   url: "https://nssdc-dev.procube.jp/nssdc-dev/nssdc-dev.repo"
+  #   client_cert: "/etc/pki/tls/certs/nssdc-client.crt"
+  #   client_key: "/etc/pki/tls/private/nssdc-client.key"
+  #   dest: "/etc/yum.repos.d/nssdc-dev.repo"
+  shell:  curl --key /etc/pki/tls/private/nssdc-client.key --cert /etc/pki/tls/certs/nssdc-client.crt -o /etc/yum.repos.d/nssdc-dev.repo https://nssdc-dev.procube.jp/nssdc-dev/nssdc-dev.repo
+  args:
+    creates: /etc/yum.repos.d/nssdc-dev.repo
+  when: use_develop_repository | default(False)

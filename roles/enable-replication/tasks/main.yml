@@ -1,0 +1,29 @@
+---
+- name: stop backup timer
+  become: true
+  service:
+    daemon_reload: true
+    name: "backup.timer"
+    state: stopped
+- name: add replication service
+  become: True
+  template:
+    src: "{{item}}"
+    dest: /usr/lib/systemd/system
+    mode: 0644
+  with_items:
+    - start-replication.service
+    - start-replication.timer
+- name: enable and start replicaton timer service
+  become: True
+  service:
+    daemon_reload: True
+    name: "start-replication.timer"
+    enabled: True
+    state: started
+- name: add start-replication script
+  become: True
+  template:
+    src: start-replication.sh
+    dest: /usr/bin/start-replication.sh
+    mode: 0755

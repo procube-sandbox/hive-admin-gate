@@ -1,0 +1,43 @@
+- name: check for user
+  iosxr_command:
+    commands:
+      - "show running-config | include username {{ cs_obj[loop_protocol ~ 'ID']}}"
+  vars:
+    ansible_connection: network_cli
+    ansible_network_os: iosxr
+  register: result_check_user
+
+- name: create user
+  iosxr_user:
+    name: "{{ cs_obj[loop_protocol ~ 'ID']}}"
+    configured_password: "{{ cs_obj[loop_protocol ~ 'Password']}}"
+    groups:
+      - sysadmin
+      - root-lr
+    update_password: always
+    state: present
+  vars:
+    ansible_connection: network_cli
+    ansible_network_os: iosxr
+  when: result_check_user.stdout_lines[0] | length == 1
+
+- name: update user
+  iosxr_user:
+    name: "{{ cs_obj[loop_protocol ~ 'ID']}}"
+    configured_password: "{{ cs_obj[loop_protocol ~ 'Password']}}"
+    update_password: always
+    state: present
+  vars:
+    ansible_connection: network_cli
+    ansible_network_os: iosxr
+  when: result_check_user.stdout_lines[0] | length > 1
+
+- name: remote login linux shell admin-exec
+  expect:
+    command: ssh -o StrictHostKeyChecking=no -l "{{ cs_obj[loop_protocol ~ 'ID']}}" "{{ hostname }}"
+    responses:
+      ".*[Pp]assword:.*": "{{ cs_obj[loop_protocol ~ 'Password']}}"
+    timeout: 10
+  changed_when: false
+  vars:
+    ansible_connection: local

@@ -1,0 +1,13 @@
+---
+- import_role:
+    name: backup-tools
+- name: Check if Service Exists
+  shell: "if chkconfig --list | grep -q start-replication.timer;   then echo true;   else echo false; fi;"
+  register: service_exists
+- name: disable start-replication timer
+  become: true
+  service:
+    daemon_reload: true
+    name: "start-replication.timer"
+    state: stopped
+  when: service_exists

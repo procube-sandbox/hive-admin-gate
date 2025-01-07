@@ -1,0 +1,76 @@
+- name: check user
+  ansible.netcommon.telnet:
+    username: "{{ cs_obj.ansibleID }}"
+    password: "{{ cs_obj.ansiblePassword }}"
+    send_newline: True
+    login_prompt:
+      - "Username: "
+    password_prompt:
+      - "Password:"
+    prompts:
+      - "#"
+    command:
+      - term len 0
+      - show running-config | include username
+    timeout: 10
+    clrf: True
+  register: command_output
+
+- name: Extract lines containing a specific string
+  set_fact:
+    result_check_user: "{{ command_output.stdout_lines | select('match', search_string) }}"
+  vars:
+    search_string: "username {{ cs_obj[loop_protocol ~ 'ID']}}"
+
+- name: create user
+  ansible.netcommon.telnet:
+    username: "{{ cs_obj.ansibleID }}"
+    password: "{{ cs_obj.ansiblePassword }}"
+    login_prompt:
+      - "Username: "
+    password_prompt:
+      - "Password:"
+    prompts:
+      - "#"
+    command:
+      - configure terminal
+      - username {{ cs_obj[loop_protocol ~ 'ID'] }} group root-lr
+      - username {{ cs_obj[loop_protocol ~ 'ID'] }} group sysadmin
+      - username {{ cs_obj[loop_protocol ~ 'ID'] }} secret {{ cs_obj[loop_protocol ~ 'Password'] }}
+      - commit
+      - end
+    timeout: 10
+  when: result_check_user | length == 0
+
+- name: update user
+  ansible.netcommon.telnet:
+    username: "{{ cs_obj.ansibleID }}"
+    password: "{{ cs_obj.ansiblePassword }}"
+    login_prompt:
+      - "Username: "
+    password_prompt:
+      - "Password:"
+    prompts:
+      - "#"
+    command:
+      - configure terminal
+      - username {{ cs_obj[loop_protocol ~ 'ID'] }} secret {{ cs_obj[loop_protocol ~ 'Password'] }}
+      - commit
+      - end
+    timeout: 10
+  when: result_check_user | length > 0
+
+- name: update connection
+  ansible.netcommon.telnet:
+    user: "{{ cs_obj[loop_protocol ~ 'ID'] }}"
+    password: "{{ cs_obj[loop_protocol ~ 'Password'] }}"
+    login_prompt:
+      - "Username: "
+    password_prompt:
+      - "Password:"
+    prompts:
+      - "#"
+    commands:
+      - "!telnet login admin-exec"
+    timeout: 10
+

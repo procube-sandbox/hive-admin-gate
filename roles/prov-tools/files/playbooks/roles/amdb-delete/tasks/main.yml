@@ -1,0 +1,4 @@
+- name: drop nsam DB for tenant
+  shell: |
+    dropdb -U nsamadmin --if-exists nsam_{{ tenantid }}
+    dropdb -U nsamadmin --if-exists nsam_{{ tenantid }}test

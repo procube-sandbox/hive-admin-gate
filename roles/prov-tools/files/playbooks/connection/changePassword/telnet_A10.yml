@@ -1,0 +1,100 @@
+- name: check user
+  ansible.netcommon.telnet:
+    username: "{{ cs_obj.ansibleID }}"
+    password: "{{ cs_obj.ansiblePassword }}"
+    login_prompt:
+      - '.*login: '
+    password_prompt:
+      - "Password:"
+    prompts:
+      - "#"
+    command:
+      - terminal length 0
+      - show admin
+    timeout: 10
+    pause: 3
+  register: command_output
+
+- name: Extract lines containing a specific string
+  set_fact:
+    result_check_user: "{{ command_output.stdout_lines | select('search', search_string) }}"
+  vars:
+    search_string: "{{ cs_obj[loop_protocol ~ 'ID']}}"
+
+- name: create user
+  ansible.netcommon.telnet:
+    username: "{{ cs_obj.ansibleID }}"
+    password: "{{ cs_obj.ansiblePassword }}"
+    login_prompt:
+      - '.*login: '
+    password_prompt:
+      - "Password: "
+    prompts:
+      - "(#|[Pp]assword:)"
+    command:
+      - "!show admin"
+      - "configure"
+      - admin {{ cs_obj[loop_protocol ~ 'ID'] }}
+      - access axapi cli web
+      - privilege write
+      - password
+      - "{{ cs_obj[loop_protocol ~ 'Password'] }}"
+      - "{{ cs_obj[loop_protocol ~ 'Password'] }}"
+      - exit
+      - exit
+    pause: 3
+    timeout: 10
+  when: result_check_user | length == 0
+
+- name: update user
+  ansible.netcommon.telnet:
+    username: "{{ cs_obj.ansibleID }}"
+    password: "{{ cs_obj.ansiblePassword }}"
+    login_prompt:
+      - '.*login: '
+    password_prompt:
+      - "Password: "
+    prompts:
+      - "(#|[Pp]assword:)"
+    command:
+      - "!show admin"
+      - "configure"
+      - admin {{ cs_obj[loop_protocol ~ 'ID'] }}
+      - password
+      - "{{ cs_obj[loop_protocol ~ 'Password'] }}"
+      - "{{ cs_obj[loop_protocol ~ 'Password'] }}"
+      - exit
+      - exit
+    pause: 3
+    timeout: 10
+  when: result_check_user | length > 0
+
+- name: update connection
+  ansible.netcommon.telnet:
+    user: "{{ cs_obj[loop_protocol ~ 'ID'] }}"
+    password: "{{ cs_obj[loop_protocol ~ 'Password'] }}"
+    login_prompt:
+      - '.*login: '
+    password_prompt:
+      - "Password: "
+    prompts:
+      - "#"
+    commands:
+      - "!telnet login admin-exec"
+    timeout: 10
+
+- name: config save
+  ansible.netcommon.telnet:
+    username: "{{ cs_obj.ansibleID }}"
+    password: "{{ cs_obj.ansiblePassword }}"
+    login_prompt:
+      - '.*login: '
+    password_prompt:
+      - "Password: "
+    prompts:
+      - "#"
+    command:
+      - write memory
+    pause: 3   
+    timeout: 10
+

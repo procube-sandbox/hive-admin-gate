@@ -1,0 +1,4 @@
+---
+hive_safe_ca_dir: "{{ hive_context_dir }}/ca"
+download_dir: "/app/download"
+ca_path: "/app/ca-certs"

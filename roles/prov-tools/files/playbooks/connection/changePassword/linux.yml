@@ -1,0 +1,19 @@
+- name: Add Users.
+  user:
+    name: "{{ cs_obj[loop_protocol ~ 'ID'] }}"
+    password: "{{ cs_obj[loop_protocol ~ 'Password'] | password_hash('sha512') }}"
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+    ansible_become: true
+
+- name: ssh login.
+  expect:
+    command: ssh -o StrictHostKeyChecking=no -l "{{ cs_obj[loop_protocol ~ 'ID'] }}" "{{ hostname }}"
+    responses:
+      ".*[Pp]assword:.*": "{{ cs_obj[loop_protocol ~ 'Password'] }}"
+    timeout: 10
+  delegate_to: localhost
+  changed_when: false
+  vars:
+    ansible_connection: local
+  

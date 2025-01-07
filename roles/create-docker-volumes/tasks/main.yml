@@ -1,0 +1,11 @@
+---
+- name: create davfs public volume
+  docker_volume:
+    name: "davfs-volume-public"
+    driver: "fentas/davfs"
+    driver_options:
+      url: "http://10.160.194.119:2000/public/"
+      username: "public"
+      password: "test"
+  vars:
+    ansible_python_interpreter: "{{ hive_home_dir }}/docker/bin/python3"

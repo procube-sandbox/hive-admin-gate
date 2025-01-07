@@ -1,0 +1,7 @@
+---
+- name: inject key-values into consul
+  consul_kv:
+    key: "{{ item.key }}"
+    value: "{{ item.value | to_json }}"
+    state: "{{ 'present' if (prov_operation | default('create')) != 'delete' else 'absent' }}"
+  with_items: "{{ webgate_kv_idps }}"

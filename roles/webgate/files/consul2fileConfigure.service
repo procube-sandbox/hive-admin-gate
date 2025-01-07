@@ -1,0 +1,17 @@
+[Unit]
+Description=Download files from consul KVS configurator
+Requires=consul.service
+After=consul.service
+
+[Service]
+KillSignal=INT
+Type=simple
+ExecStartPre=/usr/bin/consul-template '-template=/etc/consul-template.d/consul2file-configure.sh.tmpl:/var/run/consul2file-configure.sh.new' -once
+ExecStart=/usr/bin/consul-template '-template=/etc/consul-template.d/consul2file-configure.sh.tmpl:/var/run/consul2file-configure.sh.new:systemctl reload consul2file'
+ExecReload=/usr/bin/kill -s HUP $MAINPID
+Restart=on-failure
+RestartSec=30s
+SuccessExitStatus=12
+
+[Install]
+WantedBy=webgate.target

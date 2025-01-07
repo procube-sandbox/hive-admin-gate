@@ -1,0 +1,37 @@
+---
+- name: prepare directory for certificates for SAML
+  file:
+    dest: "{{ cert_dir }}"
+    state: directory
+    mode: "0755"
+- block:
+  - name: generate an OpenSSL private key with the default values (4096 bits, RSA)
+    community.crypto.openssl_privatekey:
+      path: "{{ cert_dir }}/{{ CN }}_key.pem"
+  - name: generate CSR
+    community.crypto.openssl_csr:
+      path: "{{ cert_dir }}/{{ CN }}.csr"
+      privatekey_path: "{{ cert_dir }}/{{ CN }}_key.pem"
+      common_name: "{{ CN }}"
+      extended_key_usage:
+        - clientAuth
+      subject_alt_name: "DNS:{{ CN }}"
+  vars:
+    ansible_python_interpreter: /root/prov/bin/python
+- name: fetch CSR.
+  fetch:
+    src: "{{ cert_dir }}/{{ CN }}.csr"
+    dest: "{{ cert_dir_local }}/"
+    flat: yes
+- name: generate an OpenSSL certificate
+  delegate_to: "{{ groups['mother'] | intersect(groups[hive_stage]) | first }}"
+  community.crypto.x509_certificate:
+    path: "{{ cert_dir_local }}/{{ CN }}_cert.pem"
+    csr_path: "{{ cert_dir_local }}/{{ CN }}.csr"
+    ownca_path: "{{ hive_safe_ca_dir }}/cacert.pem"
+    ownca_privatekey_path: "{{ hive_safe_ca_dir }}/cakey.pem"
+    provider: ownca
+- name: install certificate.
+  copy:
+    src: "{{ cert_dir_local }}/{{ CN }}_cert.pem"
+    dest: "{{ cert_dir }}/{{ CN }}_cert.pem"

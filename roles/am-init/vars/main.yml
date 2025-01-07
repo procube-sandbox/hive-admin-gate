@@ -1,0 +1,328 @@
+---
+saml_certs_dir: "{{ hive_context_dir }}/saml-certs"
+CN: "saml"
+saml_cert: "{{ lookup('file', saml_certs_dir + '/' + CN + '_cert.pem') }}"
+saml_key: "{{ lookup('file', saml_certs_dir + '/' + CN + '_key.pem') }}"
+saml_cert_stripped: "{{ saml_cert | replace('-----BEGIN CERTIFICATE-----\n','') | replace('-----END CERTIFICATE-----','') }}"
+
+sp_descriptor:
+  monitor:
+    display_name_ja: 稼働監視システム
+    display_name: Monitoring System
+    description: hiveサイト内のサーバ、サービスの稼働を監視するシステム
+  auth:
+    display_name_ja: 認証データ管理サービス
+    display_name: Authentication Data Manager
+    description: 端末やOTPシードなどの認証データを管理するための Web UI サービス
+  idm:
+    display_name_ja: ID管理サービス
+    display_name: ID Manager
+    description: 利用者のIDを管理するための Web UI サービス
+  pdnsadmin:
+    display_name_ja: DNS管理サービス
+    display_name: DNS Manager
+    description: DNS を管理する Web UI サービス
+
+am_kv_metadataFile: >-
+  {%- set output_services = [] -%}
+  {%- set published_names = ['monitor'] -%}
+  {%- for service in groups['services'] | intersect(groups[hive_stage]) -%}
+    {%- if hostvars[service].hive_labels is defined -%}
+      {%- set labels = hostvars[service].hive_labels -%}
+      {%- if (labels.webgate.authentication | default("none")) == "saml"  or
+            (labels.webgate.proxies | default([]) | selectattr('authentication', 'defined') | selectattr('authentication', 'eq', 'saml') | list | length) > 0 -%}
+        {%- set _ = published_names.append(labels.published_name | default(service)) -%}
+      {%- endif -%}
+    {%- endif -%}
+  {%- endfor -%}
+  {%- for published_name in published_names if published_name != "speedtest" -%}
+    {%- set fqdn = ( published_name | lower ) + "." + domain -%}
+    {%- set metadata = '<md:EntityDescriptor xmlns:md="urn:oasis:names:tc:SAML:2.0:metadata" ID="' + published_name + '" entityID="https://' + published_name + '.' + domain + '/Shibboleth.sso">\n' +
+      '   <md:Extensions xmlns:alg="urn:oasis:names:tc:SAML:metadata:algsupport">\n' +
+      '    <alg:DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha512"/>\n' +
+      '    <alg:DigestMethod Algorithm="http://www.w3.org/2001/04/xmldsig-more#sha384"/>\n' +
+      '    <alg:DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>\n' +
+      '    <alg:DigestMethod Algorithm="http://www.w3.org/2001/04/xmldsig-more#sha224"/>\n' +
+      '    <alg:DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/>\n' +
+      '    <alg:SigningMethod Algorithm="http://www.w3.org/2001/04/xmldsig-more#ecdsa-sha512"/>\n' +
+      '    <alg:SigningMethod Algorithm="http://www.w3.org/2001/04/xmldsig-more#ecdsa-sha384"/>\n' +
+      '    <alg:SigningMethod Algorithm="http://www.w3.org/2001/04/xmldsig-more#ecdsa-sha256"/>\n' +
+      '    <alg:SigningMethod Algorithm="http://www.w3.org/2001/04/xmldsig-more#ecdsa-sha224"/>\n' +
+      '    <alg:SigningMethod Algorithm="http://www.w3.org/2001/04/xmldsig-more#rsa-sha512"/>\n' +
+      '    <alg:SigningMethod Algorithm="http://www.w3.org/2001/04/xmldsig-more#rsa-sha384"/>\n' +
+      '    <alg:SigningMethod Algorithm="http://www.w3.org/2001/04/xmldsig-more#rsa-sha256"/>\n' +
+      '    <alg:SigningMethod Algorithm="http://www.w3.org/2009/xmldsig11#dsa-sha256"/>\n' +
+      '    <alg:SigningMethod Algorithm="http://www.w3.org/2001/04/xmldsig-more#ecdsa-sha1"/>\n' +
+      '    <alg:SigningMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1"/>\n' +
+      '    <alg:SigningMethod Algorithm="http://www.w3.org/2000/09/xmldsig#dsa-sha1"/>\n' +
+      '  </md:Extensions>\n' +
+      '\n' +
+      '  <md:SPSSODescriptor protocolSupportEnumeration="urn:oasis:names:tc:SAML:2.0:protocol urn:oasis:names:tc:SAML:1.1:protocol urn:oasis:names:tc:SAML:1.0:protocol">\n' +
+      '    <md:Extensions>\n' +
+      '      <init:RequestInitiator xmlns:init="urn:oasis:names:tc:SAML:profiles:SSO:request-init" Binding="urn:oasis:names:tc:SAML:profiles:SSO:request-init" Location="https://' + fqdn + '/Shibboleth.sso/Login"/>\n' +
+      (( '      <mdui:UIInfo xmlns:mdui="urn:oasis:names:tc:SAML:metadata:ui">\n' +
+      '        <mdui:DisplayName xml:lang="ja">' + sp_descriptor[published_name].display_name_ja + '</mdui:DisplayName>\n' +
+      '        <mdui:DisplayName xml:lang="en">' + sp_descriptor[published_name].display_name + '</mdui:DisplayName>\n' +
+      '        <mdui:Description xml:lang="ja">' + sp_descriptor[published_name].description + '</mdui:Description>\n' +
+      '      </mdui:UIInfo>\n' ) if sp_descriptor[published_name] is defined else '') +
+      '    </md:Extensions>\n' +
+      '    <md:KeyDescriptor>\n' +
+      '      <ds:KeyInfo xmlns:ds="http://www.w3.org/2000/09/xmldsig#">\n' +
+      '        <ds:KeyName>hive0</ds:KeyName>\n' +
+      '        <ds:X509Data>\n' +
+      '          <ds:X509SubjectName>CN=hive0</ds:X509SubjectName>\n' +
+      '          <ds:X509Certificate>' + saml_cert_stripped + ' </ds:X509Certificate>\n' +
+      '        </ds:X509Data>\n' +
+      '      </ds:KeyInfo>\n' +
+      '      <md:EncryptionMethod Algorithm="http://www.w3.org/2009/xmlenc11#aes128-gcm"/>\n' +
+      '      <md:EncryptionMethod Algorithm="http://www.w3.org/2009/xmlenc11#aes192-gcm"/>\n' +
+      '      <md:EncryptionMethod Algorithm="http://www.w3.org/2009/xmlenc11#aes256-gcm"/>\n' +
+      '      <md:EncryptionMethod Algorithm="http://www.w3.org/2001/04/xmlenc#aes128-cbc"/>\n' +
+      '      <md:EncryptionMethod Algorithm="http://www.w3.org/2001/04/xmlenc#aes192-cbc"/>\n' +
+      '      <md:EncryptionMethod Algorithm="http://www.w3.org/2001/04/xmlenc#aes256-cbc"/>\n' +
+      '      <md:EncryptionMethod Algorithm="http://www.w3.org/2001/04/xmlenc#tripledes-cbc"/>\n' +
+      '      <md:EncryptionMethod Algorithm="http://www.w3.org/2009/xmlenc11#rsa-oaep"/>\n' +
+      '      <md:EncryptionMethod Algorithm="http://www.w3.org/2001/04/xmlenc#rsa-oaep-mgf1p"/>\n' +
+      '    </md:KeyDescriptor>\n' +
+      '    <md:ArtifactResolutionService Binding="urn:oasis:names:tc:SAML:2.0:bindings:SOAP" Location="https://' + fqdn + '/Shibboleth.sso/Artifact/SOAP" index="1"/>\n' +
+      '    <md:SingleLogoutService Binding="urn:oasis:names:tc:SAML:2.0:bindings:SOAP" Location="https://' + fqdn + '/Shibboleth.sso/SLO/SOAP"/>\n' +
+      '    <md:SingleLogoutService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect" Location="https://' + fqdn + '/Shibboleth.sso/SLO/Redirect"/>\n' +
+      '    <md:SingleLogoutService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST" Location="https://' + fqdn + '/Shibboleth.sso/SLO/POST"/>\n' +
+      '    <md:SingleLogoutService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Artifact" Location="https://' + fqdn + '/Shibboleth.sso/SLO/Artifact"/>\n' +
+      '    <md:AssertionConsumerService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST" Location="https://' + fqdn + '/Shibboleth.sso/SAML2/POST" index="1"/>\n' +
+      '    <md:AssertionConsumerService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST-SimpleSign" Location="https://' + fqdn + '/Shibboleth.sso/SAML2/POST-SimpleSign" index="2"/>\n' +
+      '    <md:AssertionConsumerService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Artifact" Location="https://' + fqdn + '/Shibboleth.sso/SAML2/Artifact" index="3"/>\n' +
+      '    <md:AssertionConsumerService Binding="urn:oasis:names:tc:SAML:2.0:bindings:PAOS" Location="https://' + fqdn + '/Shibboleth.sso/SAML2/ECP" index="4"/>\n' +
+      '    <md:AssertionConsumerService Binding="urn:oasis:names:tc:SAML:1.0:profiles:browser-post" Location="https://' + fqdn + '/Shibboleth.sso/SAML/POST" index="5"/>\n' +
+      '    <md:AssertionConsumerService Binding="urn:oasis:names:tc:SAML:1.0:profiles:artifact-01" Location="https://' + fqdn + '/Shibboleth.sso/SAML/Artifact" index="6"/>\n' +
+      '  </md:SPSSODescriptor>\n' +
+      '\n' +
+      '</md:EntityDescriptor>' -%}
+    {%- set _ = output_services.append({
+      "key": "nsam/idp/metadataFile/" + published_name,
+      "value": {
+        "app_name": "idp",
+        "config_name": "metadataFile",
+        "metadataFileId": published_name,
+        "metadata": metadata
+      }
+    }) -%}
+  {%- endfor -%}
+  {{ output_services }}
+
+am_kv_common:
+  - key: nsam/idp/samlCertificate
+    value:
+      app_name: idp
+      config_name: samlCertificate
+      data1:
+        certificate: "{{ saml_cert }}"
+        privateKey: "{{ saml_key }}"
+        isPrimary: true
+      data2:
+        certificate: ""
+        privateKey: ""
+        isPrimary: false
+  - key: "nsam/idp/baseConfig"
+    value:
+      app_name: idp
+      attackProtect: true
+      config_name: baseConfig
+      inactivity: "PT{{ inactivity }}H"
+      lifetime: "PT{{ lifetime }}H"
+      failedCountLimitByUserid: "{{ failedCountLimitByUserid }}"
+      failedCountLimitBySrcIPAddr: "{{ failedCountLimitBySrcIPAddr }}"
+      expireSeconds: "{{ expireSeconds }}"
+      htmlLocalStorage: true
+      trackSPSessions: true
+      secondaryServiceIndex: true
+      additionalConfig: |
+        idp.session.consistentAddress=false
+        nsam.authn.devicemgmt.beforehandExpiringDuration=PT0S
+        idp.logout.elaboration=true
+  - key: "nsam/idp/attackProtector"
+    value:
+      app_name: idp
+      config_name: attackProtector
+      ipWhiteList: "{{ ipWhiteList | join(',') }}"
+  - key: "nsam/idp/authmethod"
+    value:
+      app_name: idp
+      config_name: authmethod
+      type: "{{ ['Periodic', authMethod] if usePeriodic | default(False) else [authMethod] }}"
+      periodicSessionAttribute:
+      - idmRole
+      - passwdChangedDatetime
+      - accountLock
+      internalAddress: ""
+      DBRecording: true
+      flowType: ""
+      extended: ""
+      mfaAuthmethod: PasswordTotp
+      usePeriodic: "{{ usePeriodic | default(False) }}"
+      eachUser: false
+      defaultTransition: APP
+      selectableTransition: []
+      allowOtherAuthn: false
+      otherAuthnFido: PasswordWithCookie
+  - key: "nsam/idp/deviceManagementCookie"
+    value:
+      app_name: idp
+      daysForExpire: "{{ daysForExpire }}"
+      daysForCheckBeforeExpire: "0"
+      daysForExtendingLimit: "0"
+      config_name: deviceManagementCookie
+  - key: "nsam/idp/ldap"
+    value:
+      app_name: idp
+      baseDN: ou=Users,{{ dn_suffix }}
+      bindDN: cn=Manager,{{ dn_suffix }}
+      bindDNCredential: "{{ db_password }}"
+      config_name: ldap
+      connectTimeout: PT7S
+      hostname: ldap
+      port: 389
+      subtreeSearch: false
+      userFilter: (&(accountLock=FALSE)(uid={user}))
+  - key: "nsam/idp/dataConnector/idp"
+    value:
+      app_name: idp
+      baseDN: ou=Users,{{ dn_suffix }}
+      bindDN: cn=Manager,{{ dn_suffix }}
+      bindDNCredential: "{{ db_password }}"
+      config_name: dataConnector
+      connectTimeout: PT7S
+      id: idp
+      hostname: ldap
+      port: 389
+      subtreeSearch: false
+      additionalConfig: ""
+      filter: (uid=$requestContext.principalName)
+      type: LDAPDirectory
+  - key: "nsam/idp/samlAttribute/idmRole"
+    value:
+      app_name: idp
+      type: Simple
+      attributeDefinitionId: idmRole
+      config_name: samlAttribute
+      dependencyName: idp
+      friendlyName: idmRole
+      saml1EncodeName: idmRole
+      saml2EncodeName: idmRole
+      sourceAttributeId: idmRole
+      additionalConfig: ""
+  - key: "nsam/idp/samlAttribute/name"
+    value:
+      app_name: idp
+      type: Simple
+      attributeDefinitionId: name
+      config_name: samlAttribute
+      dependencyName: idp
+      friendlyName: name
+      saml1EncodeName: name
+      saml2EncodeName: name
+      sourceAttributeId: cn
+      additionalConfig: ""
+  - key: "nsam/idp/samlAttribute/passwdChangedDatetime"
+    value:
+      app_name: idp
+      type: Simple
+      attributeDefinitionId: passwdChangedDatetime
+      config_name: samlAttribute
+      dependencyName: idp
+      friendlyName: passwdChangedDatetime
+      saml1EncodeName: passwdChangedDatetime
+      saml2EncodeName: passwdChangedDatetime
+      sourceAttributeId: passwdChangedDatetime
+      additionalConfig: ""
+  - key: "nsam/idp/samlAttribute/accountLock"
+    value:
+      app_name: idp
+      type: Simple
+      attributeDefinitionId: accountLock
+      config_name: samlAttribute
+      dependencyName: idp
+      friendlyName: accountLock
+      saml1EncodeName: accountLock
+      saml2EncodeName: accountLock
+      sourceAttributeId: accountLock
+      additionalConfig: ""
+  - key: "nsam/idp/samlAttribute/uid"
+    value:
+      app_name: idp
+      type: Simple
+      attributeDefinitionId: uid
+      config_name: samlAttribute
+      dependencyName: idp
+      friendlyName: uid
+      saml1EncodeName: uid
+      saml2EncodeName: uid
+      sourceAttributeId: uid
+      additionalConfig: ""
+  - key: "nsam/idp/samlAttributeFilter/idmRoleAllow"
+    value:
+      app_name: idp
+      attributeDefinitionId:
+      - idmRole
+      config_name: samlAttributeFilter
+      policyId: idmRoleAllow
+      additionalConfig: ""
+      restriction:
+      - '*'
+  - key: "nsam/idp/samlAttributeFilter/nameAllow"
+    value:
+      app_name: idp
+      attributeDefinitionId:
+      - name
+      config_name: samlAttributeFilter
+      policyId: nameAllow
+      additionalConfig: ""
+      restriction:
+      - '*'
+  - key: "nsam/idp/samlAttributeFilter/uidAllow"
+    value:
+      app_name: idp
+      attributeDefinitionId:
+      - uid
+      config_name: samlAttributeFilter
+      policyId: uidAllow
+      additionalConfig: ""
+      restriction:
+      - '*'
+  - key: "nsam/idp/samlAttributeFilter/passwdChangedDatetimeAllow"
+    value:
+      app_name: idp
+      attributeDefinitionId:
+      - passwdChangedDatetime
+      config_name: samlAttributeFilter
+      policyId: passwdChangedDatetimeAllow
+      additionalConfig: ""
+      restriction:
+      - '*'
+  - key: "nsam/idp/samlAttributeFilter/accountLockAllow"
+    value:
+      app_name: idp
+      attributeDefinitionId:
+      - accountLock
+      config_name: samlAttributeFilter
+      policyId: accountLockAllow
+      additionalConfig: ""
+      restriction:
+      - '*'
+  - key: "nsam/idp/samlNameId"
+    value:
+      app_name: idp
+      config_name: samlNameId
+      defaultFormat: "urn:oasis:names:tc:SAML:2.0:nameid-format:persistent"
+      persistentSourceAttribute: uid
+      persistentSalt: "dummy-value for salt"
+
+am_kv_force_passwd:
+  - key: "nsam/idp/forceRedirect"
+    value:
+      app_name: AccessManager
+      config_name: forceRedirect
+      enable: true
+      monitoringEnable: false
+      url: "https://idm.{{ domain }}/changePassword/changePassword?uid=%1$s&spid=%2$s&requiredOnly=TRUE&noPassword=FALSE"
+am_kv: "{{ am_kv_common + am_kv_metadataFile + ([] if pwAvailableDays == 0 else am_kv_force_passwd) }}"

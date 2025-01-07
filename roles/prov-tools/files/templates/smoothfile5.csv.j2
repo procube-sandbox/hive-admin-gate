@@ -1,0 +1,4 @@
+識別No.	削除フラグ	グループ管理企業コード	セグメントコード	職員名	職員名（フリガナ）	メールアドレス	追加アドレス	受信メール言語	ログインID1	ログインID2	パスワード	権限グループ	LDAP連携	承認者	上長承認タイプ	IP制限	ログイン許可IP
+{% for staff in (groups['smoothfile'] | map('extract', hostvars)) %}
+	{{ 1 if staff.prov_operation == 'delete' else '' }}	inside	inside	{{ staff.displayName }}		{{ staff.mail }}		Japanese	{{ staff.uid }}	{{ staff.uid }}		4	1		0	1	
+{% endfor %}

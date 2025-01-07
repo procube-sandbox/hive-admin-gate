@@ -1,0 +1,983 @@
+openapi: 3.0.0
+info:
+  contact:
+    email: mitsuru@procube.jp
+  description: NetSoare ID Manager からプロビジョニングタスクをを受けつけ、実行する
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  title: Custom Task Executer
+  version: 1.0.0
+servers:
+- url: http://localhost:8099/v1/
+tags:
+- description: NetSoare ID Manager プロビジョニングタスクをを受けつけ、実行する
+  name: task
+paths:
+  /execute_task:
+    post:
+      description: NetSoarer ID Manager からプロビジョニングタスクをを受けつけ、 ansible-playbook を実行する。
+        プロビジョニング設定名、クラス名から実行する playbook 名を選択する。(roles/provtools/files/task_executer/playbook-map.yml)
+        実行の結果を task log として NetSoarer ID Manager に送る。
+      operationId: execute_task
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/requestBody'
+        required: true
+      responses:
+        200:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/responseBody'
+          description: 正常終了
+      summary: タスクを実行する
+      tags:
+      - task
+      x-openapi-router-controller: task_executer.controllers.task_controller
+components:
+  schemas:
+    requestBody:
+      example:
+        provSetting:
+          classSetting:
+          - className: userDefinition
+            properties:
+            - uid
+            - cn
+            - accountLock
+            - ActiveDirectoryDn
+            - objectClass
+            propertyNameMapping:
+            - sourceProperty: uid
+              destinationProperty: cn
+            - sourceProperty: cn
+              destinationProperty: displayName
+            - sourceProperty: accountLock
+              destinationProperty: userAcountControl
+            - sourceProperty: ActiveDirectoryDn
+              destinationProperty: dn
+            filter: '{ "accountLock" : false}'
+          database: Master
+          description: LDAP Provisioning
+          displayName: LDAPProvisioning
+          host: localhost
+          loginname: cn=Manager,o=idm2,dc=procube,dc=info
+          name: LDAPProvisioning
+          password: admin
+          port: 389
+          type: LDAP
+          isSecure: false
+          _id: LDAPProvisioning
+        taskOperation:
+          _id: 81b06ba1-3e71-4375-8615-1931e8a5ee67-LDAPProvisioning
+          executedTimes: 0
+          id: 81b06ba1-3e71-4375-8615-1931e8a5ee67-LDAPProvisioning
+          name: LDAPProvisioning
+          operations:
+          - class: userDefinition
+            keyValue: test1
+            patch:
+            - propertyName: accountLock
+              diff: '[true,false]'
+            value: '{"uid":"test1","accountLock":false}'
+            beforeValue: '{"uid":"test1","accountLock":true}'
+            opCode: add
+          provSettingName: LDAPProvisioning
+          registerdDatetime: 2013-09-13T12:42:02.236Z
+          requestId: 81b06ba1-3e71-4375-8615-1931e8a5ee67
+          result: waiting
+          failedData: '[{"className":"userDefinition", "keyValue":"test1"}]'
+        classDefinition:
+          userDefinition:
+            _id: userDefinition
+            name: userDefinition
+            keyProperty: uid
+            propertyDefinitionList:
+            - name: uid
+              displayName: uid
+              type: string
+              required: true
+              unique: true
+              stringRestriction: id
+            - name: accountLock
+              displayName: accountLock
+              type: boolean
+            - name: cn
+              displayName: CN
+              description: CN
+              type: string
+            - name: ActiveDirectoryDn
+              displayName: ActiveDirectoryDn
+              description: ActiveDirectoryDn
+              type: string
+            - name: objectClass
+              displayName: objectClass
+              description: objectClass
+              type: string
+            - name: sAMAccountName
+              displayName: sAMAccountName
+              description: null
+              type: string
+              className: null
+              isArray: false
+              required: false
+              valuesEx: null
+              valuesInterface: null
+              allowAnotherValue: false
+              unique: false
+              stringRestriction: null
+              maxLen: null
+              minLen: null
+              derivation: null
+            - name: userPrincipalName
+              displayName: userPrincipalName
+              description: null
+              type: string
+              className: null
+              isArray: false
+              required: false
+              valuesEx: null
+              valuesInterface: null
+              allowAnotherValue: false
+              unique: false
+              stringRestriction: null
+              maxLen: null
+              minLen: null
+              derivation: null
+            - name: password
+              displayName: password
+              description: null
+              type: string
+              className: null
+              isArray: false
+              required: false
+              valuesEx: null
+              valuesInterface: null
+              allowAnotherValue: false
+              unique: false
+              stringRestriction: null
+              maxLen: null
+              minLen: null
+              derivation: null
+            displayName: null
+            description: null
+            isNestedObject: false
+      properties:
+        provSetting:
+          $ref: '#/components/schemas/_provSetting'
+        taskOperation:
+          $ref: '#/components/schemas/_task'
+        classDefinition:
+          additionalProperties:
+            $ref: '#/components/schemas/_classDefinition'
+          type: object
+      title: プロビジョニングタスク
+      type: object
+    responseBody:
+      example:
+        result: failed
+        failedData: '[{"className":"userDefinition", "keyValue":"test1"}]'
+      properties:
+        result:
+          enum:
+          - completed
+          - failed
+          type: string
+        failedData:
+          type: string
+      title: 実行結果
+      type: object
+    _classProvProperty:
+      description: クラスプロビジョニング属性はプロビジョニングで転送する属性を定義します。
+      properties:
+        propertyName:
+          description: プロビジョニングで転送する属性
+          title: 属性
+          type: string
+        mappingName:
+          description: |-
+            属性のマッピング名
+            - プロビジョニング先の属性名としてオブジェクト上の属性名と異なったものを付けることができる。
+          pattern: ^[0-9A-Za-z!$%()*\-./=?@\[\]^_`{|}~]+$
+          title: マッピング名
+          type: string
+        modifiedOnly:
+          description: |-
+            値の出力を変更があった場合に限定する。
+            - true の場合は変更がない値は null で登録する。
+            - 主キー列名（primaryColumn）のカラムと対応する属性は値の変更の有無にかかわらず出力する。
+            - 種別が RDB の場合のみ機能する。
+          title: 変更時のみ出力
+          type: boolean
+      required:
+      - propertyName
+      title: クラスプロビジョニング属性
+      type: object
+    _classProvSetting:
+      description: クラスプロビジョニング設定はクラスごとのプロビジョニング内容を定義します。
+      properties:
+        type:
+          title: 種別
+          type: string
+        className:
+          description: 対象となるクラス名
+          title: クラス名
+          type: string
+        properties:
+          items:
+            $ref: '#/components/schemas/_classProvProperty'
+          type: array
+        filter:
+          description: |-
+            フィルタ式
+            - 対象となるオブジェクトを抽出する問い合わせ式を文字列で指定する。省略された場合、このクラスの全てのオブジェクトが処理対象となる。
+          title: フィルタ式
+          type: string
+        templateDn:
+          description: テンプレートとなるオブジェクトのDNを指定する。
+          title: テンプレートDN
+          type: string
+        workingDir:
+          description: |-
+            種別が SSH+CSV であるときに CSVファイルを置くディレクトリ
+            - 省略時は、ホームディレクトリを示す ~
+          title: 作業ディレクトリ
+          type: string
+        csvNamingRule:
+          description: |-
+            種別が SSH+CSV であるときに生成する CSV ファイルの命名規則
+            - %id%, %registerdDatetime%, %currentDatetime% をパラメータとして指定可能
+            - %id% ：プロビジョニングタスク (_task) のID (id) を埋め込む
+            - %registerdDatetime% ：プロビジョニングタスク (_task) の登録日時 (registerdDatetime) を埋め込む
+            - %currentDatetime% ：プロビジョニング実行時の現在日時を埋め込む
+            - %id%, %currentDatetime% の日時は java の java.text.SimpleDateFormat でフォーマットに [yyyyMMddHHmmssSSS] を指定した形式とする
+            - 省略時は、"クラス名.csv"
+          title: CSV 命名規則
+          type: string
+        execCommand:
+          description: |-
+            種別が SSH+CSV であるときに実行するスクリプト
+            - 引数に CSV 命名規則 (csvNamingRule) を元に生成した CSV ファイル名を指定して実行する
+            - 省略時は、ファイル転送のみ行う。
+          title: 処理コマンド
+          type: string
+        tablesName:
+          description: 種別が RDB であるときに更新するテーブル名
+          title: テーブル名
+          type: string
+        primaryColumn:
+          description: |-
+            種別が RDB であるときに更新するテーブルの主キーの列名。 UPDATE, DELETE のクエリ生成で WHERE 句に指定する。
+            - 省略時は、追記のみが false の場合はプロビジョニング操作命令の命令コード add の場合に INSERT のみ行う。
+          title: 主キー列名
+          type: string
+        noDecryption:
+          description: 暗号化設定で AES 暗号が指定された属性について、復号化を行わないことを指定するフラグ
+          title: 非復号化フラグ
+          type: boolean
+      required:
+      - className
+      title: クラスプロビジョニング設定
+      type: object
+    _provisioningSettingDependency:
+      description: プロビジョニング設定依存クラスはプロビジョニング設定によって生成されるタスク間の依存関係を定義します。
+      properties:
+        name:
+          description: プロビジョニング設定の名前
+          title: プロビジョニング設定の名前
+          type: string
+        taskType:
+          description: 操作命令の分類
+          enum:
+          - AddModify
+          - Delete
+          title: 操作命令の分類
+          type: string
+      required:
+      - name
+      - taskType
+      title: プロビジョニング設定依存クラス
+      type: object
+    _provSetting:
+      description: プロビジョニング設定は対象システム毎のプロビジョニングの設定を保持します。 Bind Broker はプロビジョニング要求が発効するのを契機として、プロビジョニング設定に基づいてタスクを生成します。
+      properties:
+        name:
+          description: プロビジョニング設定の名前
+          pattern: ^[A-Za-z][0-9A-Za-z_]*$
+          title: 名前
+          type: string
+        displayName:
+          description: プロビジョニング設定の表示名
+          title: 表示名
+          type: string
+        description:
+          description: |-
+            プロビジョニング設定の説明
+            - ヘルプの生成に使用される
+          title: 説明文
+          type: string
+        database:
+          description: 連携するデータベースの名前
+          enum:
+          - Repository
+          - Master
+          title: データベース
+          type: string
+        type:
+          description: |-
+            プロビジョニングの種類（＝タスクプランナーの種類） IDM2 では、以下の種類のプロビジョニングを提供する。
+            - LDAP: LDAPディレクトリへのプロビジョニングを実行する
+            - RDB: リレーショナルデータベースへのプロビジョニングを実行する
+            - OpenLDAPSchema: OpenLDAP のスキーマのプロビジョニングを実行する
+            - OpenLDAPDB: OpenLDAP データベース設定オブジェクトのプロビジョニングを実行する
+            - SSH+CSV: SCP で CSVファイルを転送し、相手システムの CLIコマンドを呼び出して、プロビジョニングを実行する
+            - ActiveDirectory: Active Directory に対してプロビジョニングを実行する
+            - Gadget: ガジェットの変更を InfoScoop に対してプロビジョニングする
+            - CustomTaskExecutor: カスタムタスクエグゼキュータを呼び出す
+          enum:
+          - LDAP
+          - RDB
+          - OpenLDAPSchema
+          - OpenLDAPDB
+          - SSH+CSV
+          - ActiveDirectory
+          - Gadget
+          - CustomTaskExecutor
+          title: 種別
+          type: string
+        host:
+          description: プロビジョニング先のホスト名
+          title: ホスト名
+          type: string
+        port:
+          description: |-
+            プロビジョニング先のホストに接続する際のポート番号
+            - 省略時は、それぞれ標準ポート番号
+          title: ポート番号
+          type: integer
+        path:
+          description: カスタムタスクエグゼキュータのパス
+          title: パス
+          type: string
+        secureConnection:
+          description: |-
+            プロビジョニング先のホストに接続する際に使用する暗号化設定
+            - 種別が LDAP の場合のみ指定可能
+            - ActiveDirectory は常に SSL 接続
+          enum:
+          - SSL
+          - STARTTLS
+          title: 暗号化接続
+          type: string
+        loginname:
+          description: プロビジョニング先ホストにログインする際のユーザID。ただし、種別が LDAP である場合はバインドDN
+          title: ID
+          type: string
+        password:
+          description: プロビジョニング先ホストにログインする際のパスワード
+          title: パスワード
+          type: string
+        classSetting:
+          items:
+            $ref: '#/components/schemas/_classProvSetting'
+          type: array
+        dependenciesForAddModify:
+          items:
+            $ref: '#/components/schemas/_provisioningSettingDependency'
+          type: array
+        dependenciesForDelete:
+          items:
+            $ref: '#/components/schemas/_provisioningSettingDependency'
+          type: array
+        prompt:
+          description: |-
+            種別が SSH+CSV であるときにコマンドが入力可能であると判断する文字列
+            - 省略時は、$, #, %のいずれでも対応
+          title: プロンプト
+          type: string
+        timeout:
+          description: |-
+            種別が SSH+CSV であるときにコマンドがタイムアウトと判断する秒数
+            - タイムアウトの秒数を経過すると SSH 接続を切断し、タスクの実行は失敗に失敗したとする。
+            - 省略時は、60秒
+          title: タイムアウト
+          type: integer
+        withHeader:
+          description: |-
+            種別が SSH+CSV であるときに CSV ファイルにヘッダ行を出力するか否かを表す。
+            - true の場合、ヘッダ行を出力する。
+            - ヘッダ行は属性 (properties) を出力する。マッピング (propertyNameMapping) を指定している属性の場合は先属性 (destinationProperty) を出力する。
+            - 第一列の更新種別は更新種別列名 (opFieldName) を用いる。
+          title: ヘッダ行フラグ
+          type: boolean
+        opFieldName:
+          description: |-
+            種別が SSH+CSV であるときに CSV ファイルに出力する更新種別の列名。種別が RDB であるときは更新するテーブルのカラム名となり、必須。
+            - 種別が SSH+CSV の場合は、ヘッダ行フラグ (withHeader) が false の場合はこの値を指定しても列名は出力されない
+          title: 更新種別列名
+          type: string
+        addOp:
+          description: 種別が SSH+CSV であるときに CSV ファイルに出力する追加を指示する更新種別列の値。種別が RDB であるときはテーブルに挿入する追加を指示する更新種別列の値。
+          title: 追加命令
+          type: string
+        modifyOp:
+          description: 種別が SSH+CSV であるときに CSV ファイルに出力する変更を指示する更新種別列の値。種別が RDB であるときはテーブルに挿入する変更を指示する更新種別列の値。
+          title: 変更命令
+          type: string
+        deleteOp:
+          description: 種別が SSH+CSV であるときに CSV ファイルに出力する削除を指示する更新種別列の値。種別が RDB であるときはテーブルに挿入する削除を指示する更新種別列の値。
+          title: 削除命令
+          type: string
+        encode:
+          description: 種別が SSH+CSV であるときに CSV ファイルの文字コード
+          enum:
+          - UTF-8
+          - Shift-JIS
+          title: CSVエンコード
+          type: string
+        dateFormat:
+          description: |-
+            種別が SSH+CSV であるときに CSV ファイルに出力する日付のフォーマット。種別が RDB であるときはデータ型が日付の属性を文字列に変換、また逆に文字列の属性を日付に解釈して登録する際に利用する。java の java.text.SimpleDateFormat のフォーマットで指定する。
+            - 省略時は、yyyy-MM-dd
+          title: 日付フォーマット
+          type: string
+        datetimeFormat:
+          description: |-
+            種種別が SSH+CSV であるときに CSV ファイルに出力する日時のフォーマット。種別が RDB であるときはデータ型が日時の属性を文字列に変換、また逆に文字列の属性を日時に解釈して登録する際に利用する。java の java.text.SimpleDateFormat のフォーマットで指定する。
+            - 省略時は、yyyy-MM-dd HH:mm:ss
+          title: 日時フォーマット
+          type: string
+        rdbmsType:
+          description: 種別が RDB であるときの RDBMS の種類。
+          enum:
+          - PostgreSQL
+          - MySQL
+          title: RDBMSの種類
+          type: string
+        rdbDatabase:
+          description: 種別が RDB であるときのデータベース名。
+          title: RDBデータベース名
+          type: string
+        appendOnly:
+          description: |-
+            種別が RDB であるときの SQL の生成ルール。
+            - true の場合、プロビジョニング操作命令の命令コードの値に関わらず INSERT を実行する
+            - false の場合、命令コードの値を参照し add の場合は INSERT, modify の場合は UPDATE, delete の場合は DELETE を実行する
+          title: 追記のみ
+          type: boolean
+        ignoreZeroResult:
+          description: |-
+            種別が RDB であるときの UPDATE, DELETE の実行結果が、実行結果が 0 件の場合も成功として扱うか否かを示すフラグ。
+            - true の場合、実行結果が 0 件も成功として扱う
+          title: 実行結果 0 件無視
+          type: boolean
+        ignoreMultiResult:
+          description: |-
+            種別が RDB であるときの UPDATE, DELETE の実行結果が、複数件の場合も成功として扱うか否かを示すフラグ。
+            - true の場合、実行結果が複数件も成功として扱う
+          title: 実行結果複数件無視
+          type: boolean
+        leafClass:
+          items:
+            description: |-
+              他のクラスから参照される末端のクラスを宣言する
+              - Bind Broker はここに指定されたクラスの追加と変更を最初に実行し、他のクラスの処理を完了した後、ここに指定したクラスの削除処理を実行する
+              - Active Directory の場合、 Active Directory のユーザに対応するクラスをここに指定しなければならない
+              - 複数指定された場合、それらのクラス間の順序は指定できない
+            title: 末端クラス
+            type: string
+          type: array
+        outputAll:
+          description: このプロビジョニング設定によるプロビジョニングで全件を出力するか否かを示すフラグ。true の場合、プロビジョニングが発効されると常に全件出力を行います。SSH+CSVの場合は更新種別の列が出力されなくなります。
+          title: 全件出力フラグ
+          type: boolean
+        stop:
+          description: このプロビジョニング設定によるプロビジョニングを一時的に停止するか否かを示すフラグ。一時停止している間に発効したプロビジョニングについては、そのタスクの実行が保留され、プロビジョニング先へは配信されません。一時停止を解除すると、保留されていたタスクが実行されます。
+          title: 一時停止フラグ
+          type: boolean
+        ignore:
+          description: このプロビジョニング設定が無効であるか否かを示すフラグ。無効化されている間に発効したプロビジョニングについては、このプロビジョニング設定は無視され、変更内容はプロビジョニング先に対して消失しますので、注意してください。
+          title: 無効フラグ
+          type: boolean
+      required:
+      - database
+      - name
+      - type
+      title: プロビジョニング設定
+      type: object
+    _provPatch:
+      description: プロビジョニングパッチは属性毎の変更内容を管理するオブジェクトです。
+      properties:
+        propertyName:
+          description: 更新対象属性名
+          pattern: ^[A-Za-z][0-9A-Za-z_]*$
+          title: 属性名
+          type: string
+        diff:
+          description: 更新内容を表す JSONDiffPatch オブジェクトの文字列表現
+          title: 差分
+          type: string
+      required:
+      - diff
+      - propertyName
+      title: プロビジョニングパッチ
+      type: object
+    _taskOperation:
+      description: プロビジョニング操作命令はタスクハンドラが実行するプロビジョニング操作の内容を保持します。
+      properties:
+        id:
+          title: ID
+          type: string
+        taskId:
+          title: タスク ID
+          type: string
+        opCode:
+          description: 命令コード
+          enum:
+          - add
+          - modify
+          - delete
+          title: 命令コード
+          type: string
+        class:
+          description: 操作対象のクラス（ ex. ActiveDirectory であれば、 User, Group のいずれか）
+          title: クラス名
+          type: string
+        keyValue:
+          description: 操作対象のインスタンスを指し示すキー属性の値
+          title: キー値
+          type: string
+        value:
+          description: 変更後のオブジェクトの値を表す JSON オブジェクトの文字列表現
+          title: 値
+          type: string
+        beforeValue:
+          description: 変更前のオブジェクトの値を表す JSON オブジェクトの文字列表現
+          title: 値
+          type: string
+        patch:
+          items:
+            $ref: '#/components/schemas/_provPatch'
+          type: array
+      required:
+      - id
+      - taskId
+      title: プロビジョニング操作命令
+      type: object
+    _taskLog:
+      description: タスクログオブジェクトはタスク処理実行時のログを表すオブジェクトです。
+      properties:
+        logId:
+          description: ログを一意に示す文字列。
+          title: ログID
+          type: string
+        taskId:
+          description: タスク処理の ID
+          title: タスクID
+          type: string
+        provSettingName:
+          description: タスク生成元となったプロビジョニング設定の名称。
+          title: プロビジョニング設定名
+          type: string
+        timestamp:
+          description: ログの日時
+          format: date-time
+          title: 日時
+          type: string
+        code:
+          description: ログメッセージの分類を表すコードをあらわす。コード体系は IDM2 ログと共通
+          title: コード
+          type: string
+        level:
+          description: ログレベルを表す
+          enum:
+          - ERROR
+          - WARN
+          - INFO
+          title: レベル
+          type: string
+        message:
+          description: ログメッセージ
+          title: メッセージ
+          type: string
+        context:
+          description: ログメッセージの生成元となる文脈情報。 JSON 形式で保持する。
+          title: 文脈情報
+          type: string
+        informedDatetime:
+          description: ERRORレポートのメール送信を行った日時
+          format: date-time
+          title: 報告日時
+          type: string
+      required:
+      - code
+      - context
+      - level
+      - logId
+      - provSettingName
+      - taskId
+      - timestamp
+      title: タスクログオブジェクト
+      type: object
+    _task:
+      description: プロビジョニングタスクは個々のタスクの内容と実行ステータスを保持するオブジェクトです。このオブジェクトは、プロビジョニング発効時に
+        Bind Broker により、生成されます。プロビジョニング設定名で指し示されるプロビジョニング設定の種別に基づいて、処理するタスクハンドラが決定され、タスクハンドラはこのオブジェクトの内容を読み込んでプロビジョニングを実行します。
+      properties:
+        id:
+          description: タスク処理の ID
+          pattern: ^[0-9A-Za-z!$%()*\-./=?@\[\]^_`{|}~]+$
+          title: ID
+          type: string
+        requestId:
+          description: プロビジョニング要求の ID
+          pattern: ^[0-9A-Za-z!$%()*\-./=?@\[\]^_`{|}~]+$
+          title: 要求ID
+          type: string
+        name:
+          description: タスクの名称。
+          title: 名前
+          type: string
+        provSettingName:
+          description: 生成元となったプロビジョニング設定の名称。
+          title: 設定名
+          type: string
+        result:
+          description: タスクの実行結果を表す。
+          enum:
+          - waiting
+          - completed
+          - failed
+          - canceled
+          - stopped
+          title: 結果
+          type: string
+        taskType:
+          description: 操作命令の分類。
+          enum:
+          - AddModify
+          - Delete
+          title: 操作命令の分類
+          type: string
+        operations:
+          items:
+            $ref: '#/components/schemas/_taskOperation'
+          type: array
+        registerdDatetime:
+          description: タスクの登録日時
+          format: date-time
+          title: 登録日時
+          type: string
+        firstExecutedDateTime:
+          description: タスクの初回試行日時
+          format: date-time
+          title: 初回試行日時
+          type: string
+        lastExecutedDateTime:
+          description: タスクの最終試行日時
+          format: date-time
+          title: 最終試行日時
+          type: string
+        executedTimes:
+          description: タスクの試行回数
+          title: 試行回数
+          type: integer
+        failedData:
+          title: 再試行情報
+          type: string
+        logs:
+          items:
+            $ref: '#/components/schemas/_taskLog'
+          type: array
+      required:
+      - id
+      - requestId
+      - taskType
+      title: プロビジョニングタスク
+      type: object
+    _enumDefinition:
+      description: 列挙オブジェクトは文字列型の属性の値に、とりえる値を定義するオブジェクトです。属性定義の StaticEnum 属性の値や DynamicEnumPath
+        で取得される JSON オブジェクトとして出現します。
+      properties:
+        value:
+          description: |-
+            列挙される値
+            - ドロップダウンリストでこの選択肢が選ばれると、この値が属性の値となる。
+          title: 値
+          type: string
+        displayName:
+          description: |-
+            列挙値の表示名
+            - ドロップダウンリストに表示される名前。この値が null の場合は、値が表示される。
+          title: 表示名
+          type: string
+        description:
+          description: |-
+            列挙値の説明
+            - ドロップダウンリストやヘルプに表示される説明文
+          title: 説明文
+          type: string
+      required:
+      - value
+      title: 列挙オブジェクト
+      type: object
+    _propagationSetting:
+      description: 更新伝播設定はオブジェクトに更新があった場合に、他のオブジェクトや自オブジェクトの属性の値を自動的に更新する設定を定義します。
+      properties:
+        refClassName:
+          description: |-
+            伝播先クラス
+             - 伝播先保持属性はここで指定されたクラスのキー属性の値を保持しており、プロビジョニング反映後のマスタデータベース上に存在するオブジェクトを指していなければならない
+             - 伝播先のオブジェクトがプロビジョニング反映後のマスタデータベースに見つからない場合はプロビジョニング要求全体がエラーになる。ただし当該のプロビジョニング要求で伝播先のオブジェクトが削除されている場合にはエラーとならない。
+             - 省略された場合は伝播先は自オブジェクトになる
+          title: 伝播先クラス
+          type: string
+        dependency:
+          items:
+            description: |-
+              伝播元クラスの属性で、伝播先保持属性以外で伝播に影響する属性名のリスト
+               - 伝播元クラス上に定義されている属性を指定する
+               - 依存属性の値が変更されると、伝播処理が実行される
+            title: 依存属性
+            type: string
+          type: array
+        targetProperty:
+          description: |-
+            伝播先の属性の属性名
+            - 伝播先属性は伝播先のクラスに定義されており、導出式属性が設定されていなければならない
+          title: 伝播先属性
+          type: string
+      required:
+      - targetProperty
+      title: 更新伝播設定
+      type: object
+    _propertyDefinition:
+      description: 属性定義は属性のデータ型や値の保持ルールを定めるオブジェクトです。
+      properties:
+        name:
+          description: 属性の名前
+          pattern: ^[A-Za-z][0-9A-Za-z_]*$
+          title: 名前
+          type: string
+        displayName:
+          description: 属性の表示名。省略時には、名前が表示される。
+          title: 表示名
+          type: string
+        type:
+          description: 属性のデータ型
+          enum:
+          - string
+          - boolean
+          - number
+          - float
+          - datetime
+          - date
+          - ipaddress
+          - object
+          title: データ型
+          type: string
+        className:
+          description: 属性のデータ型がオブジェクトである場合に格納されるオブジェクトのクラス名
+          title: クラス名
+          type: string
+        isArray:
+          description: 属性が複数値を持つか否かを示す
+          title: 配列
+          type: boolean
+        description:
+          description: |-
+            属性の説明
+            ガジェット上で、この属性の入力コントロールにフォーカスされたときに説明文として表示される
+          title: 説明文
+          type: string
+        required:
+          description: この属性が必須であることを示す
+          title: 必須
+          type: boolean
+        values:
+          items:
+            $ref: '#/components/schemas/_enumDefinition'
+          type: array
+        valuesEx:
+          description: 属性がとり得る値を定義する列挙オブジェクトの配列を返す計算式。列挙値と同時に指定された場合は、マージした結果が列挙値となる。
+          title: 列挙値式
+          type: string
+        valuesInterface:
+          description: 多数のオブジェクトから属性の値を選択するためのリストを取得するインタフェース
+          title: 列挙値インタフェース名
+          type: string
+        allowAnotherValue:
+          description: |-
+            属性がとり得る値が列挙値や列挙値式で限定されいてる場合に、別の値が許容されるか否かを示す。特に属性が他のオブジェクトの ID を含むような場合に、列挙値式でそのリンク関係を表現し、この値を false にすることでリンク切れを禁止することができる。
+            - false の場合、ユーザインタフェース上はドロップダウンリストなどで入力値が制限されるが、 API 上もサーバ側でチェックされる。
+          title: 選択肢外入力
+          type: boolean
+        unique:
+          description: 一意性が true の場合、コレクション内のすべてのオブジェクトについて、この属性の値が一意であることを示す。ただし、オブジェクトが
+            object[] の属性内のオブジェクトである場合は、その配列の中で一意となる。
+          title: 一意
+          type: boolean
+        uniqueIgnoreCase:
+          description: 一意性チェック時に大文字小文字を無視するかどうかを示す。 true の場合、この属性の値が大文字小文字を区別せずに一意であることを示す。
+          title: 大文字小文字無視
+          type: boolean
+        stringRestriction:
+          description: 使用できる文字種および文字列パターンの限定。
+          enum:
+          - id
+          - hiragana
+          - katakana
+          - password
+          - macaddr
+          - mailaddr
+          - systemid
+          - formula
+          - query
+          - regexp
+          - dn
+          title: 文字列制約
+          type: string
+        maxLen:
+          description: |-
+            属性の値の最大長
+            - WebUI でのチェック
+            - LDAPスキーマや RDBスキーマの生成時にデータ型として出力
+            - Validateチェック
+            - ヘルプの生成
+          title: 最大長
+          type: integer
+        minLen:
+          description: |-
+            属性の値の最小長
+            - WebUI でのチェック
+            - LDAPスキーマや RDBスキーマの生成時にデータ型として出力
+            - Validateチェック
+            - ヘルプの生成
+          title: 最小長
+          type: integer
+        pattern:
+          description: この属性の文字種および文字列パターンのデータベース格納値を制約するための正規表現。本属性の値（MACアドレスなどの場合には正規化後の値）の全部または一部がこの正規表現にマッチすれば、許可される。完全一致が必要な場合には、先頭と末尾を指定した正規表現を記述しなければならない。本属性の値が設定されない場合には格納値の正規表現チェックは実行されない
+          title: 正規表現（格納値チェック用）
+          type: string
+        patternForInput:
+          description: この属性の文字種および文字列パターンの入力値を制約するための正規表現。本属性の値（登録・更新リクエストで指定された値）の全部または一部がこの正規表現にマッチすれば、許可される。完全一致が必要な場合には、先頭と末尾を指定した正規表現を記述しなければならない。本属性の値が設定されない場合には入力値の正規表現チェックは実行されない
+          title: 正規表現（入力値チェック用）
+          type: string
+        propGroupName:
+          items:
+            description: この属性が属する属性グループの名前
+            title: 属性グループ
+            type: string
+          type: array
+        derivation:
+          description: |-
+            属性の値が参照時に計算式によって計算される
+            - 属性の値は編集不可能である
+            - 伝播プロビジョニングによって、他の更新から伝播してマスタデータベースに値が保存される場合を除いて、データベースに値が保存されていない
+            - 導出式が設定されている属性をキーにしたソートおよび検索はできない
+            - 導出式が設定されている属性をパーティションの分割キーに指定することはできない
+          title: 導出式
+          type: string
+        propagations:
+          items:
+            $ref: '#/components/schemas/_propagationSetting'
+          type: array
+        encryption:
+          description: 属性を暗号化する場合に、その方式を設定する。
+          enum:
+          - SSHA
+          - AES
+          - ARGON2
+          title: 暗号化設定
+          type: string
+        outputLdapSchema:
+          description: OpenLDAP へのプロビジョニングで、この属性のスキーマを生成するかいなかを表すフラグ。 ただし、データ型がオブジェクトである場合は指定できず、スキーマを生成しない。
+          title: LDAPスキーマ生成
+          type: boolean
+      required:
+      - name
+      - type
+      title: 属性定義
+      type: object
+    _validationDefinition:
+      description: バリデーション定義では、オブジェクトの新規登録時および更新時にチェックを行う計算式を定義できます。
+      properties:
+        validateEx:
+          description: チェックを行う計算式。この計算式の結果が null か false である場合は、エラーとなる
+          title: チェック式
+          type: string
+        descriptionEx:
+          description: エラーメッセージを生成する計算式。エラーの原因となった情報を埋め込むことが可能である。
+          title: メッセージ式
+          type: string
+        isWarning:
+          description: エラーレベルが警告か否か。この値が true である場合、 API で ignoreWarning パラメータを指定することでエラーを無視して登録できる。
+          title: 警告フラグ
+          type: boolean
+      required:
+      - validateEx
+      title: バリデーション定義
+      type: object
+    _classDefinition:
+      description: クラス定義はクラスのデータ構造を定義するオブジェクトです。このクラスのオブジェクトをリポジトリに作成することで、データベースでそのクラスのオブジェクトを管理できるようになります。
+      properties:
+        name:
+          description: クラスの名前
+          pattern: ^[A-Za-z][0-9A-Za-z_]*$
+          title: クラス名
+          type: string
+        displayName:
+          description: クラスの表示名
+          title: 表示名
+          type: string
+        description:
+          description: |-
+            クラスの説明
+            - ヘルプの生成に使用される
+          title: 説明
+          type: string
+        propertyDefinitionList:
+          items:
+            $ref: '#/components/schemas/_propertyDefinition'
+          type: array
+        isPrimaryAndNestedObject:
+          description: クラスがデータベース上のトップレベルに出現し、さらに別のクラスで導出式により内包されているように出力されるかを示すフラグ。兼用する場合は
+            true
+          title: 内包オブジェクト兼用
+          type: boolean
+        isNestedObject:
+          description: クラスがデータベース上のトップレベルに出現するか、別のクラスに内包されるかを示すフラグ。内包される場合は true
+          title: 内包オブジェクト
+          type: boolean
+        keyProperty:
+          description: キーとなる属性の名前
+          pattern: ^[A-Za-z][0-9A-Za-z_]*$
+          title: キー属性
+          type: string
+        subKeyProperty:
+          items:
+            description: サブキーとなる属性の名前。サブキー属性は、新規時には編集できるが、更新できない。
+            pattern: ^[A-Za-z][0-9A-Za-z_]*$
+            title: サブキー属性
+            type: string
+          type: array
+        validation:
+          items:
+            $ref: '#/components/schemas/_validationDefinition'
+          type: array
+        outputLdapSchema:
+          description: OpenLDAP へのプロビジョニングで、このクラスのスキーマを生成するかいなかを表すフラグ
+          title: LDAPスキーマ生成
+          type: boolean
+        ldapSuperClass:
+          description: このクラスを OpenLDAP 上のスキーマへのプロビジョニングする際に、スーパークラスとして指定するクラスの名前
+          pattern: ^[0-9A-Za-z!$%()*\-./=?@\[\]^_`{|}~]+$
+          title: LDAPスーパークラス
+          type: string
+      required:
+      - name
+      - propertyDefinitionList
+      title: クラス定義
+      type: object

@@ -1,0 +1,7 @@
+---
+plugin: idm_inventory
+interface: SystemApplovalWorkIF
+host_name_property: id
+class_name: work
+groups:
+- name: works

@@ -1,0 +1,92 @@
+- name: check user
+  ansible.netcommon.telnet_aoi:
+    username: "{{ cs_obj.ansibleID }}"
+    password: "{{ cs_obj.ansiblePassword }}"
+    login_prompt:
+      - "Login: "
+    password_prompt:
+      - "Password:"
+    prompts:
+      - ">"
+    command:
+      - show local-user | include "Device management user"
+    timeout: 10
+  register: command_output
+
+- name: Extract lines containing a specific string
+  set_fact:
+    result_check_user: "{{ command_output.stdout_lines | select('match', search_string) }}"
+  vars:
+    search_string: "Device management user {{ cs_obj[loop_protocol ~ 'ID']}}"
+
+- name: create user
+  ansible.netcommon.telnet_aoi:
+    username: "{{ cs_obj.ansibleID }}"
+    password: "{{ cs_obj.ansiblePassword }}"
+    login_prompt:
+      - "Login: "
+    password_prompt:
+      - "Password:"
+    prompts:
+      - "(>|])"
+    command:
+      - system-view
+      - local-user {{ cs_obj[loop_protocol ~ 'ID'] }} class manage
+      - password simple {{ cs_obj[loop_protocol ~ 'Password'] }}
+      - service-type ssh telnet
+      - authorization-attribute user-role network-admin
+      - no authorization-attribute user-role network-operator 
+      - exit
+    timeout: 10
+  when: result_check_user | length == 0
+
+- name: update user
+  ansible.netcommon.telnet_aoi:
+    username: "{{ cs_obj.ansibleID }}"
+    password: "{{ cs_obj.ansiblePassword }}"
+    login_prompt:
+      - "Login: "
+    password_prompt:
+      - "Password:"
+    prompts:
+      - "(>|])"
+    command:
+      - system-view
+      - local-user {{ cs_obj[loop_protocol ~ 'ID'] }}
+      - password simple {{ cs_obj[loop_protocol ~ 'Password'] }}
+      - exit
+    timeout: 10
+  when: result_check_user | length > 0
+
+- name: update connection
+  ansible.netcommon.telnet_aoi:
+    user: "{{ cs_obj[loop_protocol ~ 'ID'] }}"
+    password: "{{ cs_obj[loop_protocol ~ 'Password'] }}"
+    login_prompt:
+      - "Login: "
+    password_prompt:
+      - "Password:"
+    prompts:
+      - "(>|])"
+    commands:
+      - "!telnet login admin-exec"
+    timeout: 10
+
+- name: config save
+  ansible.netcommon.telnet_aoi:
+    username: "{{ cs_obj.ansibleID }}"
+    password: "{{ cs_obj.ansiblePassword }}"
+    login_prompt:
+      - "Login: "
+    password_prompt:
+      - "Password:"
+    prompts:
+      - "(>|])"
+    command:
+      - system-view
+      - write
+      - "Y"
+      - "\r\n"
+      - "Y"
+      - exit
+    timeout: 10

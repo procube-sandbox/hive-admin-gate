@@ -1,0 +1,3 @@
+{% for staff in (groups['eve_ma'] | map('extract', hostvars) | selectattr('prov_operation', 'ne', 'delete')) %}
+{{ staff.userPrincipalName }}, 16, {{ staff.initialPassword }},0
+{% endfor %}

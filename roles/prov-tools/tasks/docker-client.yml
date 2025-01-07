@@ -1,0 +1,45 @@
+---
+- name: setup docker ce repository
+  get_url:
+    url: https://download.docker.com/linux/centos/docker-ce.repo
+    dest: /etc/yum.repos.d/
+    owner: root
+    group: root
+    mode: 0644
+- name: install docker package
+  yum:
+    name:
+      # - "libseccomp{{ libsecomp_version }}.*"
+      - docker-ce
+    state: present
+    exclude: "*.i686"
+- name: "setup docker client tls connection - create dir"
+  become: False
+  file:
+    path: "{{ home_dir }}/.docker"
+    state: directory
+    mode: 0700
+- name: "setup docker client tls connection - put ca certs"
+  become: False
+  copy:
+    src: "{{ hive_safe_ca_dir }}/cacert.pem"
+    dest: "{{ home_dir }}/.docker/ca.pem"
+    mode: 0600
+- name: "setup docker client tls connection - put certs"
+  copy:
+    remote_src: True
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    mode: 0600
+  with_items:
+    - src: "{{ cert_dir }}/{{ CN }}_key.pem"
+      dest: "{{ home_dir }}/.docker/key.pem"
+    - src: "{{ cert_dir }}/{{ CN }}_cert.pem"
+      dest: "{{ home_dir }}/.docker/cert.pem"
+- name: install docker python module
+  become: False
+  pip:
+    name:
+    - docker
+    state: present
+    virtualenv: "{{ venv }}"

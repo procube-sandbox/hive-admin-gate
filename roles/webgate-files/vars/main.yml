@@ -1,0 +1,4 @@
+---
+saml_certs_dir: "{{ hive_context_dir }}/saml-certs"
+saml_sub_prefix: "/DC={{ domain.split('.') | reverse | join('/DC=') }}/"
+CN: "saml"

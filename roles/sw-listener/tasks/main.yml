@@ -1,0 +1,60 @@
+---
+- name: create directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    mode: 0755
+  loop:
+  - "{{ cert_path }}"
+  - "{{ ca_path }}"
+- name: "put CA certificate"
+  copy:
+    src: "{{ hive_safe_ca_dir }}/cacert.pem"
+    dest: "{{ ca_path }}/ca.crt"
+    mode: 0644
+- name: "put CA key"
+  copy:
+    src: "{{ hive_safe_ca_dir }}/cakey.pem"
+    dest: "{{ ca_path }}/ca.key"
+    mode: 0644
+- name: install pip
+  apt:
+    name:
+      - pip
+      - python3.11-venv
+- name: make virtual env for sw-listener
+  pip:
+    name:
+    - pip
+    - pyOpenSSL
+    - cryptography
+    virtualenv: /root/sw-listener
+    virtualenv_command: /bin/python3 -m venv
+- block:
+  - name: generate server private key
+    openssl_privatekey:
+      path: "{{ cert_path }}/server.key"
+    run_once: true
+    ignore_errors: "{{ ansible_check_mode }}"
+  - name: create csr
+    openssl_csr:
+      commonName: "{{ target_CN }}"
+      countryName: "{{ target_C }}"
+      organizationName: "{{ target_O }}"
+      subject_alt_name: "DNS:sw-listener.{{ domain }}"
+      path: "{{ cert_path }}/server.csr"
+      privatekey_path: "{{ cert_path }}/server.key"
+      key_usage:
+        - digitalSignature
+      extended_key_usage:
+        - serverAuth
+      state: present
+  - name: sign certificate
+    community.crypto.x509_certificate:
+      path: "{{ cert_path }}/server.crt"
+      csr_path: "{{ cert_path }}/server.csr"
+      ownca_path: "{{ ca_path }}/ca.crt"
+      ownca_privatekey_path: "{{ ca_path }}/ca.key"
+      provider: ownca
+  vars:
+    ansible_python_interpreter: "/root/sw-listener/bin/python"

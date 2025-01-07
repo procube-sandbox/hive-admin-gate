@@ -1,0 +1,144 @@
+---
+- delegate_to: localhost
+  block:
+  - name: Get token of REST API.
+    uri:
+      url: "http://guacamole:8080/guacamole/api/tokens"
+      headers:
+        Content-Type: "application/x-www-form-urlencoded"
+      method: POST
+      body: 'username={{ username }}&password={{ password }}'
+      validate_certs: false
+      return_content: yes
+      status_code: 200
+    register: token
+
+  - name: register connection for change password
+    uri:
+      url: "http://guacamole:8080/guacamole/api/session/data/postgresql/connections"
+      headers:
+        Guacamole-Token: "{{ token.json.authToken }}"
+        Content-Type: "application/json"
+      method: POST
+      body_format: json
+      body:
+        name: "{{ hostname }}:{{ id }}-changepw"
+        parentIdentifier: ROOT
+        protocol: "vnc"
+        idmIdentifier: "{{ id }}"
+        parameters:
+          port: "{{ cs_obj.httpPort | default('') }}"
+          username: "{{ cs_obj.httpID }}"
+          password: "{{ cs_obj.httpPassword }}"
+          hostname: "{{ hostname }}"
+          httpLoginFormat: "{{ httpVars | to_json() }}"
+        attributes:
+          remark: "{{ remark | default('') }}"
+          max-connections: "0"
+          max-connections-per-user: "0"
+          weight: ""
+          failover-only: ""
+          guacd-port: ""
+          guacd-encryption: ""
+      validate_certs: false
+      return_content: yes
+      status_code: 200
+    vars:
+      httpVars: >-
+        {
+        "target":"proliant",
+        "protocol":"{{ cs_obj.httpProtocol }}",
+        "fqdn":"{{ hostname ~ (':' ~ cs_obj.httpPort) | default('')}}",
+        "path":"",
+        "params":
+        [[{
+        "event": "iframe",
+        "getElementMethod": "xpath",
+        "targetElementPath": "//iframe[@id='appFrame']",
+        "sendValue": ""
+        },{
+        "event":"input",
+        "getElementMethod":"xpath",
+        "targetElementPath":"//input[@id='username']",
+        "sendValue":"{{ cs_obj.ansibleID }}"
+        },{
+        "event":"input",
+        "getElementMethod":"xpath",
+        "targetElementPath":"//input[@id='password']",
+        "sendValue":"{{ cs_obj.ansiblePassword }}"
+        },{
+        "event":"click",
+        "getElementMethod":"xpath",
+        "targetElementPath":"//button[@id='login-form__submit']",
+        "sendValue":""
+        },{
+        "event":"link",
+        "getElementMethod":"xpath",
+        "targetElementPath":"//*[@id='tabsetTitleSpan']",
+        "sendValue":"/html/admin_user.html"
+        }],[{
+        "event":"click",
+        "getElementMethod":"xpath",
+        "targetElementPath":"//td[@id='user_1_checkbox']/label/span/span",
+        "sendValue":""
+        },{
+        "event":"click",
+        "getElementMethod":"xpath",
+        "targetElementPath":"//*[@id='EDIT_USER']",
+        "sendValue":""
+        },{
+        "event":"click",
+        "getElementMethod":"xpath",
+        "targetElementPath":"//*[@id='cbChangePwdSpan']",
+        "sendValue":""
+        },{
+        "event":"input",
+        "getElementMethod":"xpath",
+        "targetElementPath":"//input[@id='password']",
+        "sendValue":"{{ cs_obj[loop_protocol ~ 'Password'] }}"
+        },{
+        "event":"input",
+        "getElementMethod":"xpath",
+        "targetElementPath":"//input[@id='passwordConfirm']",
+        "sendValue":"{{ cs_obj[loop_protocol ~ 'Password'] }}"
+        },{
+        "event":"click",
+        "getElementMethod":"xpath",
+        "targetElementPath":"//*[@id='edit_user_submit']",
+        "sendValue":""
+        }]]}
+    register: changepw_connection
+  
+  - name: create container of chrome
+    uri:
+      url: "http://session-manager/create"
+      headers:
+        Content-Type: "application/json"
+      method: POST
+      body_format: json
+      body:
+        work_id: changepw
+        worker_token: "{{ token.json.authToken }}"
+        identifier: "{{ changepw_connection.json.identifier }}"
+    register: container
+
+  - name: wait for password change
+    pause:
+      seconds: 30
+  
+  - name: delete container of chrome
+    uri:
+      url: "http://guacamole:8080/guacamole/api/session/data/postgresql/connections/{{ container.json.identifier }}"
+      headers:
+        Guacamole-Token: "{{ token.json.authToken }}"
+      method: DELETE
+      validate_certs: false
+      status_code: 204
+  - name: delete connection for change password
+    uri:
+      url: "http://guacamole:8080/guacamole/api/session/data/postgresql/connections/{{ changepw_connection.json.identifier }}"
+      headers:
+        Guacamole-Token: "{{ token.json.authToken }}"
+      method: DELETE
+      validate_certs: false
+      status_code: 204

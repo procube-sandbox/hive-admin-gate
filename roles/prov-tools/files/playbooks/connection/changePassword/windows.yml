@@ -1,0 +1,11 @@
+- name: パスワード更新
+  win_user:
+    name: "{{ cs_obj[loop_protocol ~ 'ID'] }}"
+    password: "{{ cs_obj[loop_protocol ~ 'Password'] }}"
+    state: present
+  vars:
+    ansible_connection: winrm
+    ansible_winrm_transport: basic
+    ansible_winrm_scheme: http
+    ansible_port: 5985
+    ansible_winrm_server_cert_validation: ignore

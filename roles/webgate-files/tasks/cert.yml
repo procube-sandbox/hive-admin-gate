@@ -1,0 +1,44 @@
+---
+- name: prepare directory for certificates for SAML
+  file:
+    dest: "{{ saml_certs_dir }}"
+    state: directory
+    mode: "0755"
+# do not use ansible openssl_privatekey,openssl_csr module
+# which needs pyOpenSSL.
+# because we are unlikely to be able to install it 
+# on the mother host.
+  become: False
+- name: CSR
+  shell: |
+    openssl req -batch -new -newkey rsa:4096 -nodes -sha256 \
+      -subj '{{ saml_sub_prefix }}CN={{ CN }}' \
+      -keyout {{ saml_certs_dir }}/{{ CN }}_key.pem \
+      -out {{ saml_certs_dir }}/{{ CN }}.csr
+  args:
+    creates: "{{ saml_certs_dir }}/{{ CN }}.csr"
+  register: saml_csr
+- name: make extra attributes file
+  tags: signed
+  template:
+    src: extfile.cnf
+    dest: "{{ saml_certs_dir }}/{{ CN }}-extfile.cnf"
+- name: check cert.pem existence
+  stat:
+    path: "{{ saml_certs_dir}}/{{ CN }}_cert.pem"
+  register: saml_cert_pem
+  # ブラウザのセキュリティの強化で 397日以上の有効期限を持つ証明書はNET::ERR_CERT_VALIDITY_TOO_LONGのエラーになる
+  # https://www.ssls.com/blog/apples-new-ssl-lifetime-limitation-and-what-it-means-for-you/
+  # https://www.globalsign.com/en/blog/maximum-ssltls-certificate-validity-now-one-year
+  # しかし、SAMLの証明書については、期限が切れることのほうが問題。  Azure 似登録するとワーニングが出る 2022/12/08
+- name: signed certificate
+  shell: |
+    openssl x509 -req -days 3970 -sha256 -in {{ saml_certs_dir}}/{{ CN }}.csr \
+    -CA  {{ hive_safe_ca_dir }}/cacert.pem \
+    -CAkey {{ hive_safe_ca_dir }}/cakey.pem -CAserial {{ hive_safe_ca_dir }}/cacert.srl \
+    -CAcreateserial -out {{ saml_certs_dir}}/{{ CN }}_cert.pem \
+    -extfile {{ saml_certs_dir}}/{{ CN }}-extfile.cnf
+  # even if file already exists, we must do re-create certificate when CSR is changed.
+  # args:
+  #   creates: "{{ hive_safe_ca_dir }}/{{ CN }}_cert.pem"
+  when: saml_csr.changed or not (saml_cert_pem.stat.exists)

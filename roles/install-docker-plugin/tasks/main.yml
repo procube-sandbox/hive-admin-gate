@@ -1,0 +1,7 @@
+---
+- name: install fentas/davfs
+  community.docker.docker_plugin:
+    plugin_name: fentas/davfs
+    state: enable
+  vars:
+    ansible_python_interpreter: "{{ hive_home_dir }}/docker/bin/python3"

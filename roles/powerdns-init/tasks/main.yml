@@ -1,0 +1,55 @@
+---
+- name: get my public IP
+  ipify_facts:
+  delegate_to: "{{item}}"
+  delegate_facts: True
+  when: dns_mode == 'global'
+  loop: "{{ groups['hives'] | intersect(groups[hive_stage]) }}"
+- name: set published
+  set_fact:
+    published_ip: "{{ hostvars[item].ansible_facts.ipify_public_ip if dns_mode == 'global' else hostvars[item].hive_private_ip }}"
+  delegate_to: "{{item}}"
+  delegate_facts: True
+  loop: "{{ groups['hives'] | intersect(groups[hive_stage]) }}"
+- name: install pip
+  apk:
+    name: py-pip
+- name: install requests module
+  pip:
+    name: requests
+- name: wait for powerdns api available
+  wait_for:
+    host: localhost
+    port: 8081
+- name: add zone
+  powerdns_zone:
+    name: "{{ domain }}."
+    nameservers: "{{ groups['hives'] | intersect(groups[hive_stage]) | map('regex_replace', '^.*hive([0-9]+)\\..*$', 'ns\\1-' + domain + '.') | list }}"
+    kind: native
+    state: present
+    pdns_api_key: "{{ hostvars['powerdns'].db_password }}"
+- name: add SOA records
+  powerdns_record:
+    name: "{{ domain }}"
+    zone: "{{ domain }}"
+    type: SOA
+    content: "ns0-{{ domain }}. hostmaster.{{ domain }}. 2022111411 10800 3600 604800 20"
+    ttl: 3600
+    pdns_api_key: "{{ hostvars['powerdns'].db_password }}"
+- name: add records for web services
+  powerdns_record:
+    name: "{{ item }}"
+    zone: "{{ domain }}"
+    type: LUA
+    content: A "ifportup(80, {'{{ groups['hives'] | intersect(groups[hive_stage]) | map('extract', hostvars, ['published_ip']) | join(delimiter)}}'})"
+    ttl: 20
+    pdns_api_key: "{{ hostvars['powerdns'].db_password }}"
+  loop:  >-
+    {%- set output_services = ['monitor'] -%}
+    {%- for s in groups['services'] | intersect(groups[hive_stage]) -%}
+      {%- set labels = (hostvars[s].hive_labels | default({})) -%}
+      {%- if labels.webgate is defined -%}
+        {%- set _ = output_services.append(labels.published_name | default(s)) -%}
+      {%- endif -%}
+    {%- endfor -%}
+    {{ output_services }}

@@ -1,0 +1,6 @@
+---
+target_CN: "sw-listener"
+target_C: "JP"
+target_O: "Procube"
+ca_path: "/certs/ca"
+cert_path: "/certs"

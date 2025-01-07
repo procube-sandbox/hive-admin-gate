@@ -1,0 +1,7 @@
+---
+plugin: idm_inventory
+interface: SystemConnectionSpecificationIF
+host_name_property: id
+class_name: connectionSpecification
+groups:
+- name: connectionSpecifications

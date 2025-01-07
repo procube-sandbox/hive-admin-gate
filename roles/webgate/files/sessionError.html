@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html 
+	PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" 
+	"DTD/xhtml1-strict.dtd">
+	
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+<head>
+	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
+	<link rel="stylesheet" type="text/css" href="<shibmlp styleSheet/>" />
+	<title>認証セッションエラー</title>
+</head>
+
+<body>
+
+<shibmlpif logoLocation>
+<img src="<shibmlp logoLocation/>" alt="Logo" />
+</shibmlpif>
+<h1>認証セッションエラー</h1>
+
+<p>サービスの認証セッション管理でエラーが発生しました。発生した時刻は <shibmlp now /> です。</p>
+
+<p>もう一度、サービスのトップページへのアクセスをやりなおしてください。</p>
+
+<p>同じエラーが発生し、解消しない場合は、<a href="http://procube.jp">弊社のサポートページ</a>を参照して、以下のエラーメッセージの内容に応じた対応を行ってください。</p>
+<p class="error"><shibmlp errorType/> at (<shibmlp requestURL/>)</p>
+
+<p><shibmlp errorText/></p>
+
+<shibmlpif statusCode>
+	<p>Error from identity provider:</p>
+	<blockquote>
+		<strong>Status:</strong> <shibmlp statusCode/><br>
+		<shibmlpif statusCode2>
+			<strong>Sub-Status:</strong> <shibmlp statusCode2/><br/>
+		</shibmlpif>
+		<shibmlpif statusMessage>
+			<strong>Message:</strong> <shibmlp statusMessage/><br/>
+		</shibmlpif>
+	</blockquote>
+</shibmlpif>
+
+</body>
+</html>

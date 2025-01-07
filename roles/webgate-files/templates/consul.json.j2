@@ -1,0 +1,14 @@
+{
+    "log_level": "INFO",
+    "bootstrap": false,
+    "data_dir" : "/var/consul",
+    "node_name": "{{ inventory_hostname | split('.') | first }}",
+{%if consul_network_if is defined %}{%raw%}
+    "advertise_addr": "{{ GetInterfaceIP \"{%endraw%}{{ consul_network_if }}{%raw%}\"}}",
+{%endraw%}{%endif%}
+    "bootstrap_expect": 3,
+    "server": true,
+    "enable_script_checks": true,
+    "ports": {"serf_wan": -1},
+    "disable_host_node_id": true
+}

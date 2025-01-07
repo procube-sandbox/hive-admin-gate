@@ -1,0 +1,79 @@
+---
+plugin: hive_services
+services:
+  webgate:
+    image:
+      from: procube/alma8-standalone-base
+      # from: procube/centos-standalone-7.8:latest
+      roles:
+        - hive-trust-ca
+        - netsoarer-products
+        - webgate
+        - hive-syslog
+        - shibd-monitor
+        - timezone
+    standalone: True
+    endpoint_mode: dnsrr
+    ports:
+      - target_port: 80
+        published_port: 80
+        protocol: tcp
+        mode: host
+      - target_port: 443
+        published_port: 443
+        protocol: tcp
+        mode: host
+      - target_port: 8080
+        published_port: 18080
+        protocol: tcp
+        mode: host
+    # - target_port: 8010
+    #   published_port: 8010
+    #   protocol: tcp
+    # - target_port: 8011
+    #   published_port: 8011
+    #   protocol: tcp
+    # - target_port: 8300
+    #   published_port: 8300
+    #   protocol: tcp
+    # - target_port: 8301
+    #   published_port: 8301
+    #   protocol: tcp
+    # - target_port: 8301
+    #   published_port: 8301
+    #   protocol: udp
+    # - "18301:8301"
+    mode: global
+    initialize_roles:
+      - webgate-init
+    monitor_error:
+      - 'upstream timed out .* while reading response header from upstream, .* subrequest: "/shibauthorizer'
+    volumes:
+      - source: /var/consul
+        target: /var/consul
+        type: bind
+      - source: /etc/consul.json
+        target: /etc/consul.json
+        type: bind
+      - source: /var/acme
+        target: /var/acme
+        type: bind
+    # - source: /var/log/webgate-journal
+    #   target: /var/log/journal
+    #   type: bind
+    backup_scripts:
+      - name: webgate_consul
+        container: webgate
+        cleanup_days_before: 3
+        backup_command: "consul kv export"
+        restore_command: "restore-consul-kv.sh"
+        ext: json
+      - name: webgate_acme
+        container: webgate
+        directory: /var/acme/
+        cleanup_days_before: 3
+        batch_scripts:
+          - ansible-playbook -i /var/acme/hosts acme.yml
+  memcached:
+    image: memcached
+    endpoint_mode: dnsrr

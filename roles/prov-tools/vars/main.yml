@@ -1,0 +1,109 @@
+saml_certs_dir: "{{ hive_context_dir }}/saml-certs"
+CN: "saml"
+sp_descriptor:
+  monitor:
+    display_name_ja: 稼働監視システム
+    display_name: Monitoring System
+    description: hiveサイト内のサーバ、サービスの稼働を監視するシステム
+  auth:
+    display_name_ja: 認証データ管理サービス
+    display_name: Authentication Data Manager
+    description: 端末やOTPシードなどの認証データを管理するための Web UI サービス
+  idm:
+    display_name_ja: ID管理サービス
+    display_name: ID Manager
+    description: 利用者のIDを管理するための Web UI サービス
+  pdnsadmin:
+    display_name_ja: DNS管理サービス
+    display_name: DNS Manager
+    description: DNS を管理する Web UI サービス
+saml_cert: "{{ lookup('file', saml_certs_dir + '/' + CN + '_cert.pem') }}"
+saml_key: "{{ lookup('file', saml_certs_dir + '/' + CN + '_key.pem') }}"
+saml_cert_stripped: "{{ saml_cert | replace('-----BEGIN CERTIFICATE-----\n','') | replace('-----END CERTIFICATE-----','') }}"
+
+all_vars:
+  domain: "{{ domain }}"
+  hive_stage: "{{ hive_stage }}"
+  hive_name: "{{ hive_name }}"
+  first_hive: "{{ groups['first_hive'] | intersect(groups[hive_stage]) | first }}"
+  db_password: "{{ db_password }}"
+  failedCountLimitByUserid: "{{ failedCountLimitByUserid }}"
+  failedCountLimitBySrcIPAddr: "{{ failedCountLimitBySrcIPAddr }}"
+  expireSeconds: "{{ expireSeconds }}"
+  ipWhiteList: "{{ ipWhiteList }}"
+  dn_suffix: "{{ dn_suffix }}"
+  pwAvailableDays: "{{ pwAvailableDays }}"
+  saml_cert: "{{ saml_cert }}"
+  saml_key: "{{ saml_key }}"
+  saml_cert_stripped: "{{ saml_cert_stripped }}"
+  saml_sps_wg: >-
+    {%- set output_sps = [] -%}
+    {%- for published_name in ['idm'] -%}
+      {%- set fqdn = ( published_name | lower ) + "." + domain -%}
+      {%- set metadata = '<md:EntityDescriptor xmlns:md="urn:oasis:names:tc:SAML:2.0:metadata" ID="' + published_name + '" entityID="https://' + published_name + '.' + domain + '/Shibboleth.sso">\n' +
+        '   <md:Extensions xmlns:alg="urn:oasis:names:tc:SAML:metadata:algsupport">\n' +
+        '    <alg:DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha512"/>\n' +
+        '    <alg:DigestMethod Algorithm="http://www.w3.org/2001/04/xmldsig-more#sha384"/>\n' +
+        '    <alg:DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>\n' +
+        '    <alg:DigestMethod Algorithm="http://www.w3.org/2001/04/xmldsig-more#sha224"/>\n' +
+        '    <alg:DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/>\n' +
+        '    <alg:SigningMethod Algorithm="http://www.w3.org/2001/04/xmldsig-more#ecdsa-sha512"/>\n' +
+        '    <alg:SigningMethod Algorithm="http://www.w3.org/2001/04/xmldsig-more#ecdsa-sha384"/>\n' +
+        '    <alg:SigningMethod Algorithm="http://www.w3.org/2001/04/xmldsig-more#ecdsa-sha256"/>\n' +
+        '    <alg:SigningMethod Algorithm="http://www.w3.org/2001/04/xmldsig-more#ecdsa-sha224"/>\n' +
+        '    <alg:SigningMethod Algorithm="http://www.w3.org/2001/04/xmldsig-more#rsa-sha512"/>\n' +
+        '    <alg:SigningMethod Algorithm="http://www.w3.org/2001/04/xmldsig-more#rsa-sha384"/>\n' +
+        '    <alg:SigningMethod Algorithm="http://www.w3.org/2001/04/xmldsig-more#rsa-sha256"/>\n' +
+        '    <alg:SigningMethod Algorithm="http://www.w3.org/2009/xmldsig11#dsa-sha256"/>\n' +
+        '    <alg:SigningMethod Algorithm="http://www.w3.org/2001/04/xmldsig-more#ecdsa-sha1"/>\n' +
+        '    <alg:SigningMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1"/>\n' +
+        '    <alg:SigningMethod Algorithm="http://www.w3.org/2000/09/xmldsig#dsa-sha1"/>\n' +
+        '  </md:Extensions>\n' +
+        '\n' +
+        '  <md:SPSSODescriptor protocolSupportEnumeration="urn:oasis:names:tc:SAML:2.0:protocol urn:oasis:names:tc:SAML:1.1:protocol urn:oasis:names:tc:SAML:1.0:protocol">\n' +
+        '    <md:Extensions>\n' +
+        '      <init:RequestInitiator xmlns:init="urn:oasis:names:tc:SAML:profiles:SSO:request-init" Binding="urn:oasis:names:tc:SAML:profiles:SSO:request-init" Location="https://' + fqdn + '/Shibboleth.sso/Login"/>\n' +
+        (( '      <mdui:UIInfo xmlns:mdui="urn:oasis:names:tc:SAML:metadata:ui">\n' +
+        '        <mdui:DisplayName xml:lang="ja">' + sp_descriptor[published_name].display_name_ja + '</mdui:DisplayName>\n' +
+        '        <mdui:DisplayName xml:lang="en">' + sp_descriptor[published_name].display_name + '</mdui:DisplayName>\n' +
+        '        <mdui:Description xml:lang="ja">' + sp_descriptor[published_name].description + '</mdui:Description>\n' +
+        '      </mdui:UIInfo>\n' ) if sp_descriptor[published_name] is defined else '') +
+        '    </md:Extensions>\n' +
+        '    <md:KeyDescriptor>\n' +
+        '      <ds:KeyInfo xmlns:ds="http://www.w3.org/2000/09/xmldsig#">\n' +
+        '        <ds:KeyName>hive0</ds:KeyName>\n' +
+        '        <ds:X509Data>\n' +
+        '          <ds:X509SubjectName>CN=hive0</ds:X509SubjectName>\n' +
+        '          <ds:X509Certificate>' + saml_cert_stripped + ' </ds:X509Certificate>\n' +
+        '        </ds:X509Data>\n' +
+        '      </ds:KeyInfo>\n' +
+        '      <md:EncryptionMethod Algorithm="http://www.w3.org/2009/xmlenc11#aes128-gcm"/>\n' +
+        '      <md:EncryptionMethod Algorithm="http://www.w3.org/2009/xmlenc11#aes192-gcm"/>\n' +
+        '      <md:EncryptionMethod Algorithm="http://www.w3.org/2009/xmlenc11#aes256-gcm"/>\n' +
+        '      <md:EncryptionMethod Algorithm="http://www.w3.org/2001/04/xmlenc#aes128-cbc"/>\n' +
+        '      <md:EncryptionMethod Algorithm="http://www.w3.org/2001/04/xmlenc#aes192-cbc"/>\n' +
+        '      <md:EncryptionMethod Algorithm="http://www.w3.org/2001/04/xmlenc#aes256-cbc"/>\n' +
+        '      <md:EncryptionMethod Algorithm="http://www.w3.org/2001/04/xmlenc#tripledes-cbc"/>\n' +
+        '      <md:EncryptionMethod Algorithm="http://www.w3.org/2009/xmlenc11#rsa-oaep"/>\n' +
+        '      <md:EncryptionMethod Algorithm="http://www.w3.org/2001/04/xmlenc#rsa-oaep-mgf1p"/>\n' +
+        '    </md:KeyDescriptor>\n' +
+        '    <md:ArtifactResolutionService Binding="urn:oasis:names:tc:SAML:2.0:bindings:SOAP" Location="https://' + fqdn + '/Shibboleth.sso/Artifact/SOAP" index="1"/>\n' +
+        '    <md:SingleLogoutService Binding="urn:oasis:names:tc:SAML:2.0:bindings:SOAP" Location="https://' + fqdn + '/Shibboleth.sso/SLO/SOAP"/>\n' +
+        '    <md:SingleLogoutService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect" Location="https://' + fqdn + '/Shibboleth.sso/SLO/Redirect"/>\n' +
+        '    <md:SingleLogoutService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST" Location="https://' + fqdn + '/Shibboleth.sso/SLO/POST"/>\n' +
+        '    <md:SingleLogoutService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Artifact" Location="https://' + fqdn + '/Shibboleth.sso/SLO/Artifact"/>\n' +
+        '    <md:AssertionConsumerService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST" Location="https://' + fqdn + '/Shibboleth.sso/SAML2/POST" index="1"/>\n' +
+        '    <md:AssertionConsumerService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST-SimpleSign" Location="https://' + fqdn + '/Shibboleth.sso/SAML2/POST-SimpleSign" index="2"/>\n' +
+        '    <md:AssertionConsumerService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Artifact" Location="https://' + fqdn + '/Shibboleth.sso/SAML2/Artifact" index="3"/>\n' +
+        '    <md:AssertionConsumerService Binding="urn:oasis:names:tc:SAML:2.0:bindings:PAOS" Location="https://' + fqdn + '/Shibboleth.sso/SAML2/ECP" index="4"/>\n' +
+        '    <md:AssertionConsumerService Binding="urn:oasis:names:tc:SAML:1.0:profiles:browser-post" Location="https://' + fqdn + '/Shibboleth.sso/SAML/POST" index="5"/>\n' +
+        '    <md:AssertionConsumerService Binding="urn:oasis:names:tc:SAML:1.0:profiles:artifact-01" Location="https://' + fqdn + '/Shibboleth.sso/SAML/Artifact" index="6"/>\n' +
+        '  </md:SPSSODescriptor>\n' +
+        '\n' +
+        '</md:EntityDescriptor>' -%}
+      {%- set _ = output_sps.append({
+        "published_name": published_name,
+        "metadata": metadata
+      }) -%}
+    {%- endfor -%}
+    {{ output_sps }}

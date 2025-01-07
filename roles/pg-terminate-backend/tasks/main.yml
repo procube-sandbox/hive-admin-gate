@@ -1,0 +1,6 @@
+---
+- name: put pg-terminate-backend.sql
+  copy:
+    src: pg-terminate-backend.sql
+    dest: /root/
+

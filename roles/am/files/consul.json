@@ -1,0 +1,8 @@
+{
+  "data_dir" : "/var/consul",
+  "log_level": "INFO",
+  "bootstrap": true,
+  "client_addr": "0.0.0.0",
+  "advertise_addr": "{{ GetPrivateIP }}",
+  "server": true
+}

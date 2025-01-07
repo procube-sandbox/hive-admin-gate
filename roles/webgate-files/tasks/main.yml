@@ -1,0 +1,19 @@
+---
+- name: setup certificate for SAML
+  include_tasks:
+    file: cert.yml
+    apply:
+      become: False
+      delegate_to: "{{ groups['mother'] | intersect(groups[hive_stage]) | first }}"
+      run_once: True
+- name: put consul config
+  template:
+    src: consul.json.j2
+    dest: /etc/consul.json
+- name: ensure consul data directory
+  file:
+    path: /var/consul
+    state: directory
+- name: setup acme get/renew certificate tool
+  include_tasks:
+    file: acme.yml

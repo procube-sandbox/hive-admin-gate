@@ -1,0 +1,7 @@
+---
+- name: delete application
+  shell: |
+    yes | nsamctl delete {{ tenantid  }}
+  register: delete_result
+  args:
+    removes: /opt/wildfly/standalone/deployments/{{ tenantid  }}.war

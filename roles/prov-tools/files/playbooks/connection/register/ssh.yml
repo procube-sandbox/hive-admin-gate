@@ -1,0 +1,118 @@
+---
+- delegate_to: localhost
+  block:
+  - name: Get token of REST API.
+    uri:
+      url: "http://guacamole:8080/guacamole/api/tokens"
+      headers:
+        Content-Type: "application/x-www-form-urlencoded"
+      method: POST
+      body: 'username={{ username }}&password={{ password }}'
+      validate_certs: false
+      return_content: yes
+      status_code: 200
+    register: token
+  
+  - name: Get Connections.
+    uri:
+      url: "http://guacamole:8080/guacamole/api/session/data/postgresql/connections"
+      headers:
+        Guacamole-Token: "{{ token.json.authToken }}"
+      method: GET
+      validate_certs: false
+      return_content: yes
+      status_code: 200
+    register: guacamole_connections
+  - name: Set fact to target connection id.
+    set_fact:
+      connectionidssh: "{{ item.key }}"
+    when: item.value.idmIdentifier == id and item.value.protocol == 'ssh'
+    loop: "{{ guacamole_connections.json | dict2items }}"
+    loop_control:
+      label: "{{ item.key }}"
+  
+  - name: Put connection.
+    uri:
+      url: "http://guacamole:8080/guacamole/api/session/data/postgresql/connections/{{ connectionidssh }}"
+      headers:
+        Guacamole-Token: "{{ token.json.authToken }}"
+        Content-Type: "application/json"
+      method: PUT
+      body_format: json
+      body:
+        name: "{{ hostname }}:{{ id }}-ssh"
+        parentIdentifier: ROOT
+        protocol: "ssh"
+        idmIdentifier: "{{ id }}"
+        parameters:
+          port: "{{ sshConsolePort if sshConsolePort is defined else cs_obj.sshPort | default('') }}"
+          create-recording-path: "true"
+          recording-path: "${HISTORY_PATH}/${HISTORY_UUID}"
+          username: "{{ cs_obj.sshID | default(None) }}"
+          password: "{{ cs_obj.sshPassword | default(None) }}"
+          create-typescript-path: "true"
+          typescript-path: "${HISTORY_PATH}/${HISTORY_UUID}"
+          typescript-name: typescript
+          hostname: "{{ hostname }}"
+          swcZone: "{{ swcZone | join(',') | default('') }}"
+          terminal-type: "{{ 'vt100' if cs_obj.osType == 'iosxr' else omit }}"
+        attributes:
+          remark: "{{ remark | default('') }}"
+          max-connections: "0"
+          max-connections-per-user: "0"
+          weight: ""
+          failover-only: ""
+          guacd-port: ""
+          guacd-encryption: ""
+      validate_certs: false
+      status_code: 204
+    when: prov_operation != 'delete' and connectionidssh is defined
+  
+  - name: Post connection.
+    uri:
+      url: "http://guacamole:8080/guacamole/api/session/data/postgresql/connections"
+      headers:
+        Guacamole-Token: "{{ token.json.authToken }}"
+        Content-Type: "application/json"
+      method: POST
+      body_format: json
+      body:
+        name: "{{ hostname }}:{{ id }}-ssh"
+        parentIdentifier: ROOT
+        protocol: "ssh"
+        idmIdentifier: "{{ id }}"
+        parameters:
+          port: "{{ sshConsolePort if sshConsolePort is defined else cs_obj.sshPort | default('') }}"
+          create-recording-path: "true"
+          recording-path: "${HISTORY_PATH}/${HISTORY_UUID}"
+          username: "{{ cs_obj.sshID | default(None) }}"
+          password: "{{ cs_obj.sshPassword | default(None) }}"
+          create-typescript-path: "true"
+          typescript-path: "${HISTORY_PATH}/${HISTORY_UUID}"
+          typescript-name: typescript
+          hostname: "{{ hostname }}"
+          swcZone: "{{ swcZone | join(',') | default('') }}"
+          terminal-type: "{{ 'vt100' if cs_obj.osType == 'iosxr' else omit }}"
+        attributes:
+          remark: "{{ remark | default('') }}"
+          max-connections: "0"
+          max-connections-per-user: "0"
+          weight: ""
+          failover-only: ""
+          guacd-port: ""
+          guacd-encryption: ""
+      validate_certs: false
+      return_content: yes
+      status_code: 200
+    when: connectionidssh is not defined
+    register: new_connection
+  
+  - name: Delete connection.
+    uri:
+      url: "http://guacamole:8080/guacamole/api/session/data/postgresql/connections/{{ connectionidssh }}"
+      headers:
+        Guacamole-Token: "{{ token.json.authToken }}"
+      method: DELETE
+      validate_certs: false
+      status_code: 204
+    when: prov_operation == 'delete' and connectionidssh is defined

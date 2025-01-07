@@ -1,0 +1,18 @@
+---
+collections:
+  - ansible.posix
+  - community.general
+  - community.docker
+  - community.crypto
+  - arista.eos
+  - cisco.ios
+  - cisco.iosxr
+  - cisco.asa
+  - fortinet.fortios
+  - junipernetworks.junos
+  - f5networks.f5_modules
+  - ansible.windows
+  - a10.acos_axapi
+  - paloaltonetworks.panos
+  - community.network
+  - seiko.smartcs

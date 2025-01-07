@@ -1,0 +1,45 @@
+---
+- name: Provisioning for userGroup
+  hosts: userGroups
+  gather_facts: false
+  serial: 1
+  vars:
+    ansible_connection: local
+    ansible_python_interpreter: /root/prov/bin/python
+
+  tasks:
+  - name: Get OUs.
+    uri:
+      url: "http://localhost:8090/IDManager/SystemOUIF"
+      headers:
+        HTTP_SYSTEMACCOUNT: "SYSTEM"
+      method: GET
+      validate_certs: false
+      status_code: 200
+    register: ouList
+  - name: Delete ou in this user group.
+    uri:
+      url: "http://localhost:8090/IDManager/SystemOUIF/{{ item.id }}"
+      headers:
+        HTTP_SYSTEMACCOUNT: "SYSTEM"
+      method: DELETE
+      validate_certs: false
+      status_code: 200
+    loop: "{{ ouList.json | selectattr('teamID', 'eq', id) | list }}"
+    when: prov_operation == 'delete'
+  - name: Post OU.
+    uri:
+      url: "http://localhost:8090/IDManager/SystemOUIF/"
+      headers:
+        HTTP_SYSTEMACCOUNT: "SYSTEM"
+      method: POST
+      body_format: json
+      body:
+        id: "{{ item.id }}"
+        name: "{{ item.name }}"
+        teamName: "{{ name }}"
+        teamID: "{{ id }}"
+      validate_certs: false
+      status_code: 200
+    when: item.id not in ouList.json | map(attribute='id') | list
+    loop: "{{ ou }}"

@@ -1,0 +1,70 @@
+- name: check for user
+  bigip_command:
+    commands:
+      - show running-config auth user "{{ cs_obj[loop_protocol ~ 'ID'] }}"
+    provider: "{{ provider }}"
+  vars:
+    ansible_connection: local
+    provider:
+      server: "{{ hostname }}"
+      user: "{{ cs_obj.ansibleID }}"
+      password: "{{ cs_obj.ansiblePassword }}"
+      validate_certs: no
+  register: result_check_user
+
+- name: create user
+  bigip_user:
+    username_credential: "{{ cs_obj[loop_protocol ~ 'ID'] }}"
+    password_credential: simple
+    update_password: on_create
+    partition_access:
+      - all:admin
+    state: present
+    shell: tmsh
+    provider: "{{ provider }}"
+  vars:
+    ansible_connection: local
+    provider:
+      server: "{{ hostname }}"
+      user: "{{ cs_obj.ansibleID }}" 
+      password: "{{ cs_obj.ansiblePassword }}"
+      validate_certs: no
+  when: result_check_user.stdout[0] | length < 100
+
+- name: update user
+  bigip_user:
+    username_credential: "{{ cs_obj[loop_protocol ~ 'ID'] }}"
+    password_credential: "{{ cs_obj[loop_protocol ~ 'Password'] }}"
+    state: present
+    provider: "{{ provider }}"
+  vars:
+    ansible_connection: local
+    provider:
+      server: "{{ hostname }}"
+      user: "{{ cs_obj.ansibleID }}"
+      password: "{{ cs_obj.ansiblePassword }}"
+      validate_certs: no
+  delegate_to: localhost
+
+- name: remote login linux shell admin-exec
+  expect:
+    command: ssh -l "{{ cs_obj[loop_protocol ~ 'ID'] }}" "{{ hostname }}"
+    responses:
+      ".*[Pp]assword:.*": "{{ cs_obj[loop_protocol ~ 'Password'] }}"
+    timeout: 10
+  changed_when: false
+  vars:
+    ansible_connection: local
+
+- name: config save
+  no_log: false
+  bigip_config:
+    save: yes
+    provider: "{{ provider }}"
+  vars:
+    ansible_connection: local
+    provider:
+      server: "{{ hostname }}"
+      user: "{{ cs_obj.ansibleID }}"
+      password: "{{ cs_obj.ansiblePassword }}"
+      validate_certs: no

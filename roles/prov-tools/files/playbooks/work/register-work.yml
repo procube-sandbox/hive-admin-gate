@@ -1,0 +1,119 @@
+---
+- name: Get token of REST API.
+  uri:
+    url: "http://guacamole:8080/guacamole/api/tokens"
+    headers:
+      Content-Type: "application/x-www-form-urlencoded"
+    method: POST
+    body: 'username={{ username }}&password={{ password }}'
+    validate_certs: false
+    return_content: yes
+    status_code: 200
+  register: token
+- name: output token
+  debug:
+    msg: "{{ token.json.authToken }}"
+- name: Get Connections.
+  uri:
+    url: "http://guacamole:8080/guacamole/api/session/data/postgresql/connections"
+    headers:
+      Guacamole-Token: "{{ token.json.authToken }}"
+    method: GET
+    validate_certs: false
+    return_content: yes
+    status_code: 200
+  register: guacamoleConnections
+- name: Make connectionid list.
+  set_fact:
+    connectionids: >
+      {{ connectionids | default([]) + [{ "identifier": item }] }}
+  loop: "{{ guacamoleConnections.json | dict2items | selectattr('value.idmIdentifier', 'in', resultConnections) | map(attribute='key') | list }}"
+- set_fact:
+    Periods: "{{ Periods | default([]) }}"
+- set_fact:
+    resultUsers: "{{ resultUsers | default([]) }}"
+- set_fact:
+    manageUsers: "{{ manageUsers | default([]) }}"
+- name: Format periods.
+  set_fact:
+    req_periods: >
+      {{ req_periods | default([]) + [{
+        "validFrom": item.validFrom,
+        "validUntil": item.validUntil,
+        "startTime": item.startHour ~ ":" ~ (0 ~ item.startMinute)[-2:] ~ ":00" if item.specificTime else "00:00:00",
+        "endTime": item.endHour ~ ":" ~ (0 ~ item.endMinute)[-2:] ~ ":00" if item.specificTime else "23:59:59"
+      }] }}
+  loop: "{{ Periods }}"
+- name: Format workers.
+  set_fact:
+    workers: >
+      {{ workers | default([]) + [{
+        "identifier": item,
+        "name": "hoge",
+        "isWorker": true,
+        "isManager": false
+      }] }}
+  loop: "{{ resultUsers | difference(manageUsers) }}"
+- name: Format managers.
+  set_fact:
+    managers: >
+      {{ managers | default([]) + [{
+        "identifier": item,
+        "name": "hoge",
+        "isWorker": false,
+        "isManager": true
+      }] }}
+  loop: "{{ manageUsers | difference(resultUsers) }}"
+- name: Format worker and manager.
+  set_fact:
+    workerAndManager: >
+      {{ workerAndManager | default([]) + [{
+        "identifier": item,
+        "name": "hoge",
+        "isWorker": true,
+        "isManager": true
+      }] }}
+  loop: "{{ resultUsers | intersect(manageUsers) }}"
+- name: Post Work.
+  uri:
+    url: "http://guacamole:8080/guacamole/api/session/data/postgresql/works"
+    headers:
+      Guacamole-Token: "{{ token.json.authToken }}"
+      Content-Type: "application/json;charset=UTF-8"
+    method: POST
+    body_format: json
+    body:
+      name: "{{ name }}"
+      idmIdentifier: "{{ id }}"
+      disabled: false
+      attributes: {}
+      periods: "{{ req_periods | default([]) }}"
+      connections: "{{ connectionids | default([]) }}"
+      users: "{{ (workers | default([])) + (managers | default([])) + (workerAndManager | default([])) }}"
+    validate_certs: false
+    status_code: 200
+- name: Get connection list
+  uri:
+    url: "http://localhost:8090/IDManager/SystemConnectionIF"
+    headers:
+      HTTP_SYSTEMACCOUNT: "SYSTEM"
+    method: GET
+    validate_certs: false
+    status_code: 200
+  register: connectionList
+- name: to file server
+  uri:
+    url: "http://file-server:4200/api/works/add"
+    headers:
+      Guacamole-Token: "{{ token.json.authToken }}"
+    method: POST
+    body_format: json
+    body:
+      dirname: "{{ name }}"
+      idmIdentifier: "{{ id }}"
+      password: hoge
+      enableUpload: "{{ not disableUpload | default(true) }}"
+      enableDownload: "{{ not disableDownload | default(true) }}"
+      whitelist: "{{ connectionList.json | selectattr('id', 'in', resultConnections) | map(attribute='hostname') | list }}"
+    validate_certs: false
+    status_code: 201

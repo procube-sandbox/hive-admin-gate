@@ -1,0 +1,91 @@
+---
+plugin: hive_services
+available_on: 
+  - production
+  - staging
+services:
+  powerdns:
+    image: procube/powerdns:latest
+    environment:
+      MYSQL_PASSWORD: "{{db_password}}"
+      MYSQL_HOST: pdnsdb
+      MYSQL_DNSSEC: "yes"
+      MYSQL_CHECK_INTERVAL: "10"
+      MYSQL_CHECK_RETRY: "50"
+    command:
+    - "--api=yes"
+    - "--api-key={{db_password}}"
+    - "--webserver=yes"
+    - "--webserver-address=0.0.0.0"
+    - "--webserver-allow-from=0.0.0.0/0"
+    ports:
+    - "53:53/tcp"
+    - "53:53/udp"
+    initialize_roles:
+    - python-aptk
+    - powerdns-init
+  pdnsdb:
+    image:
+      from: "mariadb:10.4"
+      roles:
+      - python-aptk
+      - powerdns-initdb
+    environment:
+      MYSQL_ROOT_PASSWORD: "{{db_password}}"
+      MYSQL_USER: powerdns
+      MYSQL_PASSWORD: "{{db_password}}"
+      MYSQL_DATABASE: powerdns
+      # maridb container spend long time to initialize timezone info of the database.
+      # it can be skip by following envinronment variable.
+      # MYSQL_INITDB_SKIP_TZINFO: "yes"
+    endpoint_mode: dnsrr
+    volumes:
+    - source: pdnsdb_data
+      target: /var/lib/mysql
+      type: volume
+      drbd:
+        size: 500M
+        fstype: xfs
+        available_on:
+        - production
+        - staging
+  pdnsadmin:
+    image:
+      from: ngoduykhanh/powerdns-admin:0.2.2
+      roles:
+      - powerdns-admin
+    environment:
+      SQLALCHEMY_DATABASE_URI: "sqlite:////app/data/padmin.sqlite"
+      GUINCORN_TIMEOUT: "60"
+      GUNICORN_WORKERS: "2"
+    endpoint_mode: dnsrr
+    volumes:
+    - source: pdnsadmin_data
+      target: /app/data
+      type: volume
+      drbd:
+        size: 500M
+        fstype: xfs
+        available_on:
+        - production
+        - staging
+    labels:
+      webgate:
+        access_control: "<Rule require='HTTP_REMOTEGROUP'>IDM_ADMIN</Rule>"
+        authentication: saml
+        proxies:
+        - target_port: 80
+          impersonate:
+            type: formauth
+            loginPathRegexp: "^/login"
+            credentials:
+              userid:
+                name: username
+                type: static
+                value: admin
+              password:
+                name: password
+                type: static
+                value: "{{ db_password }}"
+            overwriteFormParam: []
+            additionalFormParam: []

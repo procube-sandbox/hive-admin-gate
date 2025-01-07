@@ -1,0 +1,122 @@
+# parameters for template
+
+# サイトをインターネットに公開する際のドメイン。
+# 親ドメインから本システムのDNSサーバにサブドメイン委任されていなければならない。
+domain: "{{ hive_name }}.local"
+# 委任先の FQDN は ns[0-2]-{{ domain }} とする（グルーレコードではなく親ドメインの直下レコードとする）
+
+# パスワード最低文字数
+pwpolicyMinLen: 12
+
+# パスワード有効期限(日数） 0 は有効期限切れしないことを意味する
+pwAvailableDays: 0
+
+# 攻撃防御：同一ユーザによるログイン失敗回数上限
+failedCountLimitByUserid: "5"
+
+# 攻撃防御：同一IPからのログイン失敗回数上限
+failedCountLimitBySrcIPAddr: "40"
+
+# 攻撃防御：同一IPからのログイン失敗について無視するIPアドレスのリスト
+ipWhiteList: []
+
+# 攻撃防御：攻撃を検知した場合にロックする時間（秒）
+expireSeconds: "900"
+
+# 認証方式
+# "Password" を指定するとパスワードで認証し、"MFA" を指定するとパスワードとOTPの二要素認証を行う
+authMethod: "MFA"
+
+# ログイン状態維持機能の利用
+usePeriodic: false
+
+# ログイン状態維持日数
+daysForExpire: "7"
+
+# IdP/SP セッション最長時間（時間）
+lifetime: "8"
+
+# 証明書モード
+certificate_mode: certbot
+
+# DNS モード
+dns_mode: global
+
+# IdP/SP セッション無通信タイムアウト（時間）
+# SPAのアプリケーションは IdP/SP にアクセスせずに利用するので、
+# 無通信タイムアウトをセッション最長維持時間と同じにしておく必要がある。
+inactivity: "{{ lifetime }}"
+
+## サーバ証明書の属性
+acme_country_name: JP
+acme_organization_name: "procube Inc."
+acme_organizational_unit_name: "BUSINESS FORCE"
+
+# SELinux 設定
+# デフォルトは permissive 、ただし Amazon Linux 2 では disable
+hive_selinux: permissive
+
+consul_network_if: eth0
+
+hive_timezone: "Asia/Tokyo"
+
+restore_sequence_mongodb:
+- name: ldap_settings
+  interfaces:
+  - name: _sandboxProvSettings
+    key_property: name
+    filter:
+      name:
+        "$in":
+        - LdapDBProvisioning
+        - LdapSchemaProvisioning
+  - name: _sandboxOpenLdapDbSetting
+    key_property: number
+- name: definitions
+  interfaces:
+ #- name: _sandboxSystemSettings
+ #  key_property: name
+  - name: _sandboxClasses
+    key_property: name
+  - name: _sandboxInterfaces
+    key_property: name
+  - name: _sandboxGadgets
+    key_property: name
+  - name: _sandboxProvSettings
+    key_property: name
+    filter:
+      name:
+        "$nin":
+        - LdapDBProvisioning
+        - LdapSchemaProvisioning
+- name: master_tables
+  interfaces:
+  - name: LdapGenericObjectEditorIF0
+    key_property: dn
+  - name: LdapGenericObjectEditorIF1
+    key_property: dn
+  - name: LdapGenericObjectEditorIF2
+    key_property: dn
+- name: objects
+  interfaces:
+  - name: userEditorInterface
+    key_property: uid
+
+restore_sequence_mariadb:
+- name: is_tablayouts
+  key_columns:
+  - tabId
+  - roleOrder
+  - temp
+- name: is_portallayouts
+  key_columns:
+  - name
+
+certificates:
+  - certificate_fqdn: "session-manager"
+    ca_valid_in: "{{ 365 * 10 }}"
+    sub_prefix: "/DC={{ hive_name.split('.') | reverse | join('/DC=') }}"
+    cert_dest: /root/.docker/cert.pem
+    key_dest: /root/.docker/key.pem
+
+hive_safe_ca_dir: "{{ hive_context_dir }}/ca"

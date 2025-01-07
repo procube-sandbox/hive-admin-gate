@@ -1,0 +1,12 @@
+- name: ensure acme directory
+  file:
+    path: /var/acme/data
+    state: directory
+- name: put vars_file for get/renew acme certificate
+  template:
+    dest: /var/acme/acme-vars.yml
+    src: acme-vars.yml.j2
+- name: put ansible inventory
+  template:
+    dest: /var/acme/hosts
+    src: hosts.j2

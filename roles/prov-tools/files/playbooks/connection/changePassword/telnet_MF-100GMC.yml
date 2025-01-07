@@ -1,0 +1,76 @@
+- name: check user
+  ansible.netcommon.telnet_aoi:
+    username: "{{ cs_obj.ansibleID }}"
+    password: "{{ cs_obj.ansiblePassword }}"
+    clrf: "True"
+    login_prompt:
+      - "Login:"
+    password_prompt:
+      - "Password:"
+    prompts:
+      - ">"
+    command:
+      - show cli
+    timeout: 10
+  register: command_output
+
+- name: Extract lines containing a specific string
+  set_fact:
+    result_check_user: "{{ command_output.stdout_lines | select('search', search_string) }}"
+  vars:
+    search_string: "{{ cs_obj[loop_protocol ~ 'ID']}}"
+
+- name: create user
+  ansible.netcommon.telnet_aoi:
+    username: "{{ cs_obj.ansibleID }}"
+    password: "{{ cs_obj.ansiblePassword }}"
+    clrf: "True"
+    login_prompt:
+      - "Login:"
+    password_prompt:
+      - "Password:"
+    prompts:
+      - ">|password:"
+    command:
+      - "set account 2 {{ cs_obj[loop_protocol ~ 'ID'] }}" 
+      -  "{{ cs_obj[loop_protocol ~ 'Password'] }}"
+      -  "{{ cs_obj[loop_protocol ~ 'Password'] }}"
+      - logout
+    timeout: 10
+  when: result_check_user | length == 0
+
+- name: update user
+  ansible.netcommon.telnet_aoi:
+    username: "{{ cs_obj.ansibleID }}"
+    password: "{{ cs_obj.ansiblePassword }}"
+    clrf: "True"
+    login_prompt:
+      - "Login:"
+    password_prompt:
+      - "Password:"
+    prompts:
+      - ">|password:"
+    command:
+      - "chg password {{ cs_obj[loop_protocol ~ 'ID'] }}"
+      -  "{{ cs_obj[loop_protocol ~ 'Password'] }}"
+      -  "{{ cs_obj[loop_protocol ~ 'Password'] }}"
+      - logout
+    timeout: 10
+  when: result_check_user | length > 0
+
+- name: update connection
+  ansible.netcommon.telnet_aoi:
+    user: "{{ cs_obj[loop_protocol ~ 'ID'] }}"
+    password: "{{ cs_obj[loop_protocol ~ 'Password'] }}"
+    clrf: "True"
+    login_prompt:
+      - "Login:"
+    password_prompt:
+      - "Password:"
+    prompts:
+      - ">"
+    commands:
+      - show cli
+    timeout: 10
+
+

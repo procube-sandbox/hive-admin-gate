@@ -1,0 +1,16 @@
+---
+- name: Provisioning to user account.
+  hosts: works
+  gather_facts: false
+  serial: 1
+  vars:
+    ansible_connection: local
+    ansible_python_interpreter: /root/prov/bin/python
+    username: guacadmin
+    password: guacadmin
+
+  tasks:
+  - name: Register work.
+    include_tasks:
+      file: work/register-work.yml
+    when: status == "waiting"

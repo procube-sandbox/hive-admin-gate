@@ -1,0 +1,18 @@
+---
+- name: create extensions directory if does not exist
+  file:
+    path: extensions
+    state: directory
+  become: true
+
+- name: copy guacamole properties file
+  copy:
+    src: guacamole.properties
+    dest: ./
+  become: true
+
+- name: copy guacamole property file
+  copy:
+    src: guacamole.properties
+    dest: ./
+  become: true

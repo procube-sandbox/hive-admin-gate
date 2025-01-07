@@ -1,0 +1,15 @@
+---
+plugin: hive_services
+services:
+  document:
+    image: procube/admingate-doc:latest
+    user: root
+    labels:
+      published_name: document
+      webgate:
+        authentication: saml
+        proxies:
+          - target_port: 3000
+            pathPattern: /
+            useWebSocket: true
+    endpoint_mode: dnsrr

@@ -1,0 +1,197 @@
+---
+plugin: hive_services
+services:
+  idm:
+    image:
+      from: procube/alma8-standalone-base
+      roles:
+        - hive-trust-ca
+        - timezone
+        - netsoarer-products
+        - idm
+        - hive-syslog
+        - prov-tools
+    standalone: True
+    ports:
+    - "10443:9443"
+    - "18090:8090"
+    labels:
+      published_name: idm
+      webgate:
+        proxies:
+        - target_port: 80
+          readTimeout: 7200
+          maxBodySize: 10
+          pathPattern: /
+          authentication: saml
+        - target_port: 80
+          postfix: ":chpw"
+          pathPattern: /changePassword
+    initialize_roles:
+      #- idm-download
+      - idm-init
+    volumes:
+    - source: idm_mysql
+      target: /var/lib/mysql
+      type: volume
+      drbd:
+        fstype: xfs
+        size: 300M
+    - source: idm_mongo
+      target: /var/lib/mongo
+      type: volume
+      drbd:
+        fstype: xfs
+        size: 10G
+    - source: idm_eu_app_csv
+      target: /var/lib/eu_app
+      type: volume
+      drbd:
+        fstype: xfs
+        size: 5G
+    backup_scripts:
+    - name: idm
+      container: idm
+      backup_command: . /etc/profile.d/java.sh; idm2ctl backup -f /root/today.tar.gz
+      restore_command: . /etc/profile.d/java.sh;idm2ctl restore -f /root/today.tar.gz
+      backup_file: /root/today.tar.gz
+      restore_file: /root/today.tar.gz
+      cleanup_days_before: 3
+    - name: idm_eu_app_csv
+      container: idm
+      directory: /var/lib/eu_app
+      cleanup_days_before: 3
+  am:
+    image:
+      from: procube/alma8-standalone-base
+      roles:
+      - hive-trust-ca
+      - netsoarer-products
+      - am
+      - hive-syslog
+      - timezone
+    standalone: true
+    initialize_roles:
+      - am-init
+    labels:
+      published_name: auth
+      webgate:
+        access_control: "<Rule require='HTTP_REMOTEGROUP'>IDM_ADMIN</Rule>"
+        proxies:
+          - target_port: 8009
+            target_protocol: ajp
+          - target_port: 80
+            pathPattern: /idp_userFiles/
+          - target_port: 8089
+            pathPattern: /idp-console/
+            authentication: saml
+          # 次の Proxy pass は webgate の内部設定と競合するので、 webgate経由のときはプロキシ不要
+          # - target_port: 80
+          #   pathPattern: /ns_(error|webbox)/
+    endpoint_mode: dnsrr
+    volumes:
+    - source: am_opt
+      target: /opt
+      type: volume
+      drbd:
+        fstype: xfs
+        size: 10G
+    - source: am_consul
+      target: /var/consul
+      type: volume
+      drbd:
+        fstype: xfs
+        size: 60M
+    - source: am_etc_system
+      target: /etc/systemd/system
+      type: volume
+      drbd:
+        fstype: xfs
+        size: 60M
+    - source: am_etc_httpd
+      target: /etc/httpd/
+      type: volume
+      drbd:
+        fstype: xfs
+        size: 60M
+    backup_scripts:
+    - name: am_opt
+      container: am
+      backup_command: "cd /opt && tar czf - ."
+      restore_command: "cd /opt && rm -rf $(find . -maxdepth 1 -not -name .) && systemctl stop wildfly && tar xzf - && systemctl start wildfly"
+      cleanup_days_before: 3
+    - name: am_consul
+      container: am
+      backup_command: "consul kv export"
+      restore_command: "restore-consul-kv.sh"
+      cleanup_days_before: 3
+    - name: am_etc_system
+      container: am
+      directory: /etc/systemd/system
+      cleanup_days_before: 3
+    - name: am_httpd_conf
+      container: am
+      directory: /etc/httpd
+      cleanup_days_before: 3
+  ldap:
+    image: procube/openldap:latest
+    initialize_roles:
+      - ldap
+    environment:
+      LDAP_CONFIG_PASSWORD: "{{ db_password }}"
+    endpoint_mode: dnsrr
+    volumes:
+    - source: ldap_data
+      target: /var/lib/openldap/openldap-data
+      type: volume
+      drbd:
+        fstype: xfs
+        size: 300M
+    - source: ldap_config
+      target: /etc/openldap/slapd.d
+      type: volume
+      drbd:
+        fstype: xfs
+        size: 60M
+    backup_scripts:
+    - name: ldap_config
+      backup_command: slapcat -b cn=config
+      restore_command: /var/lib/openldap/restore-config.sh /root/ldap_config.ldif
+      restore_file: /root/ldap_config.ldif
+      ext: ldif
+      cleanup_days_before: 3
+    - name: ldap
+      backup_command: slapcat
+      restore_command: /var/lib/openldap/restore.sh /root/ldap.ldif
+      restore_file: /root/ldap.ldif
+      ext: ldif
+      cleanup_days_before: 3
+  amdb:
+    image:
+      from: "postgres:15"
+      roles:
+      - python-aptk
+      - pg-terminate-backend
+    initialize_roles:
+      - amdb-init
+    environment:
+      POSTGRES_USER: nsamadmin
+      POSTGRES_PASSWORD: nets0@rer
+      POSTGRES_HOST_AUTH_METHOD: md5
+      POSTGRES_INITDB_ARGS: --auth-host=md5
+    endpoint_mode: dnsrr
+    volumes:
+      - source: amdb_data
+        target: /var/lib/postgresql/data/
+        type: volume
+        drbd:
+          fstype: xfs
+          size: 500M
+    backup_scripts:
+    - name: amdb
+      backup_command: "pg_dump -U nsamadmin -c -C --if-exists nsam_idp | gzip > /root/today.sql.gz"
+      restore_command: "psql -U nsamadmin -f /root/pg-terminate-backend.sql; zcat /root/today.sql.gz | psql -U nsamadmin"
+      backup_file: /root/today.sql.gz
+      restore_file: /root/today.sql.gz
+      ext: sql.gz
+      cleanup_days_before: 10

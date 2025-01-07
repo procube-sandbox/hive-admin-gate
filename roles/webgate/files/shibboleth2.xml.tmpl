@@ -1,0 +1,199 @@
+<SPConfig xmlns="urn:mace:shibboleth:2.0:native:sp:config"
+    xmlns:conf="urn:mace:shibboleth:2.0:native:sp:config"
+    xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion"
+    xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol"
+    xmlns:md="urn:oasis:names:tc:SAML:2.0:metadata"
+    xmlns:am="urn:mace:shibboleth:2.0:attribute-map"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    clockSkew="180">
+{{- /* for upper compatible, kvs of old version may not have serialNumber in cerificate */}}
+{{- define "getCertBasename" }}{{if .serialNumber}}{{.serialNumber}}{{else}}{{.fqdn}}{{ end }}{{ end }}
+
+  <OutOfProcess tranLogFormat="%attr">
+    <Extensions>
+      <Library path="plugins.so" fatal="true" />
+      <Library path="memcache-store.so" fatal="true" />
+    </Extensions>
+  </OutOfProcess>
+  <InProcess catchAll="true">
+    <Extensions>
+      <Library path="plugins-lite.so" fatal="true" />
+    </Extensions>
+  </InProcess>
+
+  <StorageService type="MEMCACHE" id="mc" prefix="SERVICE_PREFIX:">
+    <Hosts>memcached:11211</Hosts>
+  </StorageService>
+
+  <StorageService type="MEMCACHE" id="mc-ctx" prefix="SERVICE_PREFIX:" buildMap="1">
+    <Hosts>memcached:11211</Hosts>
+  </StorageService>
+  <StorageService type="Memory" id="mem" cleanupInterval="60"/>
+  <SessionCache type="StorageService" StorageService="mc-ctx" StorageServiceLite="mc" cleanupInterval="60"  />
+  <ReplayCache StorageService="mc"/>
+
+  <ArtifactMap StorageService="mc" artifactTTL="180"/>
+    <!--
+    To customize behavior for specific resources on Apache, and to link vhosts or
+    resources to ApplicationOverride settings below, use web server options/commands.
+    See https://wiki.shibboleth.net/confluence/display/SHIB2/NativeSPConfigurationElements for help.
+
+    For examples with the RequestMap XML syntax instead, see the example-shibboleth2.xml
+    file, and the https://wiki.shibboleth.net/confluence/display/SHIB2/NativeSPRequestMapHowTo topic.
+    -->
+    <RequestMapper type="XML">
+      <RequestMap applicationId="default">
+{{- range ls "virtualHosts" }}{{$vhost := .Value | parseJSON}}
+  {{- if printf "SamlSps/%s" $vhost.fqdn | keyExists}}
+    {{- $auth := key (printf "SamlSps/%s" $vhost.fqdn) | parseJSON}}
+        <Host name="{{$vhost.fqdn}}" applicationId="{{$vhost.name}}"
+                authType="shibboleth"
+                requireSession="true">
+    {{- if $auth.accessControl}}
+          <AccessControl>{{$auth.accessControl}}</AccessControl>
+    {{- end}}
+        </Host>
+  {{- end}}
+{{- end}}
+      </RequestMap>
+    </RequestMapper>
+
+    <!-- The ApplicationDefaults element is where most of Shibboleth's SAML bits are defined. -->
+    <ApplicationDefaults entityID="https://localhost/Shibboleth.sso" encryption="false">
+
+        <Sessions cookieProps="https"/>
+        <!--
+        Allows overriding of error template information/filenames. You can
+        also add attributes with values that can be plugged into the templates.
+        -->
+        <Errors supportContact="root@localhost"
+            helpLocation="/about.html"
+            styleSheet="/shibboleth-sp/main.css"/>
+
+{{- range ls "metadatas" }}{{$metadata := .Value | parseJSON}}
+  {{- scratch.Set "isGlobal" true}}{{if $metadata.spFqdn}}{{scratch.Set "isGlobal" false}}{{end}}
+  {{- if scratch.Get "isGlobal"}}
+    {{- if $metadata.url}}
+        <MetadataProvider type="XML" validate="false" reloadInterval="600" url="{{$metadata.url}}" backingFilePath="{{.Key}}.xml" />
+    {{- else}}
+        <MetadataProvider type="XML" validate="false" file="metadata/{{.Key}}.xml" />
+    {{- end}}
+  {{- end}}
+{{- end}}
+
+{{- if ls "attributes" }}
+        <!-- Map to extract attributes from SAML assertions. -->
+        <AttributeExtractor type="XML" validate="true" >
+          <am:Attributes>
+{{- range ls "attributes" }}{{$attribute := .Value | parseJSON}}
+            <am:Attribute name="{{$attribute.source}}" id="{{$attribute.name}}">
+  {{- if eq $attribute.type "NameIDAttributeDecoder"}}
+              <am:AttributeDecoder xsi:type="am:{{$attribute.type}}" formatter="$Name"/>
+  {{- else}}
+              <am:AttributeDecoder xsi:type="am:{{$attribute.type}}"/>
+  {{- end}}
+            </am:Attribute>
+{{- end}}
+          </am:Attributes>
+        </AttributeExtractor>
+{{-  end}}
+
+        <!-- Use a SAML query if no attributes are supplied during SSO. -->
+        <AttributeResolver type="Query" subjectMatch="true"/>
+
+        <!-- Default filtering policy for recognized attributes, lets other data pass. -->
+        <AttributeFilter type="XML" validate="true" path="attribute-policy.xml"/>
+
+{{- range ls "virtualHosts" }}{{$vhost := .Value | parseJSON}}
+  {{- if printf "SamlSps/%s" $vhost.fqdn | keyExists}}
+    {{- $auth := key (printf "SamlSps/%s" $vhost.fqdn) | parseJSON}}
+    {{- scratch.Set "cookieProps" "http"}}
+    {{- scratch.Set "handlerSSL" "false"}}
+    {{- if printf "certificates/%s" $vhost.certificateFqdn | keyExists}}
+      {{- scratch.Set "cookieProps" "https"}}
+      {{- scratch.Set "handlerSSL" "true"}}
+    {{- end}}
+        <ApplicationOverride id="{{$vhost.name}}" entityID="https://{{$vhost.fqdn}}/Shibboleth.sso"
+                            REMOTE_USER="{{$auth.uidAttrName}}">
+            <!--
+            Controls session lifetimes, address checks, cookie handling, and the protocol handlers.
+            You MUST supply an effectively unique handlerURL value for each of your applications.
+            The value defaults to /Shibboleth.sso, and should be a relative path, with the SP computing
+            a relative value based on the virtual host. Using handlerSSL="true", the default, will force
+            the protocol to be https. You should also set cookieProps to "https" for SSL-only sites.
+            Note that while we default checkAddress to "false", this has a negative impact on the
+            security of your site. Stealing sessions via cookie theft is much easier with this disabled.
+            -->
+            {{- scratch.Set "lifetime" 28800}}{{if $auth.lifetime}}{{scratch.Set "lifetime" $auth.lifetime}}{{end}}
+            {{- scratch.Set "timeout" 3600}}{{if $auth.timeout}}{{scratch.Set "timeout" $auth.timeout}}{{end}}
+            {{- scratch.Set "relayState" "ss:mem"}}{{if $auth.relayState}}{{scratch.Set "relayState" $auth.relayState}}{{end}}
+            {{- scratch.Set "checkAddress" "false"}}
+            {{- scratch.Set "consistentAddress" "true"}}
+            {{- if $auth.checkAddress}}
+              {{- if eq $auth.checkAddress "none"}}{{scratch.Set "consistentAddress" "false"}}
+              {{- else if eq $auth.checkAddress "matchesIdP"}}{{scratch.Set "checkAddress" "true"}}{{end}}
+            {{- end}}
+            <Sessions lifetime="{{scratch.Get "lifetime"}}" timeout="{{scratch.Get "timeout"}}" relayState="{{scratch.Get "relayState"}}"
+                      checkAddress="{{scratch.Get "checkAddress"}}" consistentAddress="{{scratch.Get "consistentAddress"}}"
+                      handlerSSL="{{scratch.Get "handlerSSL"}}" cookieProps="{{scratch.Get "cookieProps"}}">
+
+                <!--
+                Configures SSO for a default IdP. To allow for >1 IdP, remove
+                entityID property and adjust discoveryURL to point to discovery service.
+                (Set discoveryProtocol to "WAYF" for legacy Shibboleth WAYF support.)
+                You can also override entityID on /Login query string, or in RequestMap/htaccess.
+                -->
+                <SSO entityID="{{$auth.idpEntityId}}">
+                  SAML2 SAML1
+                </SSO>
+
+                <!-- SAML and local-only logout. -->
+                <Logout>SAML2 Local</Logout>
+
+                <!-- Extension service that generates "approximate" metadata based on SP configuration. -->
+                <Handler type="MetadataGenerator" Location="/Metadata" signing="false"/>
+
+                <!-- Status reporting service. -->
+                <Handler type="Status" Location="/Status" acl="127.0.0.1 ::1"/>
+
+                <!-- Session diagnostic service. -->
+                <Handler type="Session" Location="/Session" showAttributeValues="false"/>
+
+                <!-- JSON feed of discovery information. -->
+                <Handler type="DiscoveryFeed" Location="/DiscoFeed"/>
+
+                <!-- Atrribute Resolver from SAML Attribute Provider -->
+                <Handler type="AttributeResolver"  Location="/AttributeResolver" />
+            </Sessions>
+    {{- range ls "metadatas" }}{{$metadata := .Value | parseJSON}}
+      {{- if $metadata.spFqdn }}
+        {{- if eq $metadata.spFqdn $vhost.fqdn }}
+          {{- if $metadata.url}}
+            <MetadataProvider type="XML" validate="false" reloadInterval="600" url="{{$metadata.url}}" backingFilePath="{{.Key}}.xml" />
+          {{- else}}
+            <MetadataProvider type="XML" validate="false" file="metadata/{{.Key}}.xml" />
+          {{- end}}
+        {{- end}}
+      {{- end}}
+    {{- end}}
+
+            <!-- Simple file-based resolver for using a single keypair. -->
+    {{- if printf "certificates/%s" $auth.certificateFqdn | keyExists}}
+            <CredentialResolver type="File" key="/etc/pki/tls/private/{{printf "certificates/%s" $auth.certificateFqdn | key | parseJSON | executeTemplate "getCertBasename"}}.key" certificate="/etc/pki/tls/certs/{{printf "certificates/%s" $auth.certificateFqdn | key | parseJSON | executeTemplate "getCertBasename"}}.crt"/>
+    {{- else if printf "certificates/%s" $vhost.certificateFqdn | keyExists | and (not $auth.selfCertificate)}}
+            <CredentialResolver type="File" key="/etc/pki/tls/private/{{printf "certificates/%s" $vhost.certificateFqdn | key | parseJSON | executeTemplate "getCertBasename"}}.key" certificate="/etc/pki/tls/certs/{{printf "certificates/%s" $vhost.certificateFqdn | key | parseJSON | executeTemplate "getCertBasename"}}.crt"/>
+    {{- else}}
+            <CredentialResolver type="File" key="/etc/shibboleth/sp-signing-key.pem" certificate="/etc/shibboleth/sp-signing-cert.pem"/>
+    {{- end}}
+        </ApplicationOverride>
+  {{- end}}
+{{- end}}
+    </ApplicationDefaults>
+
+    <!-- Policies that determine how to process and authenticate runtime messages. -->
+    <SecurityPolicyProvider type="XML" validate="true" path="security-policy.xml"/>
+
+    <!-- Low-level configuration about protocols and bindings available for use. -->
+    <ProtocolProvider type="XML" validate="true" reloadChanges="false" path="protocols.xml"/>
+
+</SPConfig>

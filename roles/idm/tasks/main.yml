@@ -1,0 +1,106 @@
+---
+# This role installs ID Manager 2
+- name: delete GPG key
+  rpm_key:
+    state: absent
+    key: /etc/pki/rpm-gpg/RPM-GPG-KEY-AlmaLinux
+- name: import GPG key
+  rpm_key:
+    state: present
+    key: https://repo.almalinux.org/almalinux/RPM-GPG-KEY-AlmaLinux
+- name: check nodejs dnf module is enabled
+  shell: yum module list --disabled nodejs
+  register: nodejs_enabled
+  failed_when: false
+  changed_when: false
+  check_mode: False
+- name: disable nodejs dnf module
+  shell: |
+    yum module disable -y nodejs
+  when: nodejs_enabled.rc == 1
+- name: install NetSoarer ID Manager 2
+  yum:
+    state: latest
+    name:
+      - sudo
+      - initscripts
+      - python2-pip
+      - NetSoarer-IDManager-bindbroker
+      - NetSoarer-IDManager-gadget
+      - NetSoarer-IDManager-initializer
+      - NetSoarer-IDManager-servlets
+      - NetSoarer-ErrorPages
+- name: php install
+  yum:
+    state: present
+    name:
+      - '@php:8.0'
+      - php-intl
+      - php-pdo
+      - php-mysqlnd
+      - php-mysqli
+- name: install for admin-gate
+  yum:
+    state: present
+    name:
+      - sshpass
+      - openssh-clients
+      - cronie-noanacron
+- name: copy customaized files
+  copy:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+  loop:
+  - src: httpd-idm2-global.conf
+    dest: /etc/httpd/conf.d/httpd-idm2-global.conf
+  - src: httpd-admin.conf
+    dest: /usr/local/NetSoarer/IDManager/var/httpd-admin.conf
+- name: patch logout URL
+  lineinfile:
+    path: /opt/tomcat10/webapps/infoscoop/WEB-INF/web.xml
+    regexp: "<param-value>(/dologout|https://idm\\.{{ domain | regex_replace('\\.', '\\\\\\.') }}/Shibboleth.sso/Logout)</param-value>"
+    line: '<param-value>https://idm.{{ domain }}/Shibboleth.sso/Logout</param-value>'
+- name: E/U System unarchive
+  unarchive:
+    src: admin.tar.gz
+    dest: /var/www/html/
+    owner: apache
+    group: apache
+# - name: tmp dir chmod
+#   file:
+#     path: /var/www/html/admin/tmp
+#     state: directory
+#     owner: apache
+#     group: apache
+#     mode: 0777
+#     recurse: yes
+# - name: logs dir chmod
+#   file:
+#     path: /var/www/html/admin/logs
+#     state: directory
+#     owner: apache
+#     group: apache
+#     mode: 0777
+#     recurse: yes
+- name: csv upload dir
+  file:
+    path: /var/lib/eu_app/csv
+    state: directory
+    owner: apache
+    group: apache
+    mode: 0777
+    recurse: yes
+- name: copy SMTP Config files
+  copy:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+  loop:
+  - src: const_smtp.php
+    dest: /var/www/html/admin/src/Const/const_smtp.php
+  - src: csv_upload_mail_body.php
+    dest: /var/www/html/admin/templates/email/text/csv_upload.php
+# - name: patch bindbroker config
+#   lineinfile:
+#     path: /usr/local/NetSoarer/IDManager/BindBroker/config/default.js
+#     regexp: "debug :"
+#     line: "             debug : false,"

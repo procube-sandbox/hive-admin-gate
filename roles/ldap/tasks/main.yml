@@ -1,0 +1,27 @@
+---
+- name: setup pip
+  apk:
+    name:
+    - py3-pip
+    - python3-dev
+    - gcc
+    - g++
+    - openldap-dev
+- name: install python-ldap
+  pip:
+    name:
+    - python-ldap
+- name: configure modules
+  ldap_attrs:
+    dn: "cn=module{0},cn=config"
+    bind_dn: "cn=config"
+    bind_pw: "{{ db_password }}"
+    attributes:
+      olcModuleLoad: "{0}argon2"
+- name: Set password hash policy
+  ldap_attrs:
+    dn: "olcDatabase={-1}frontend,cn=config"
+    bind_dn: "cn=config"
+    bind_pw: "{{ db_password }}"
+    attributes:
+      olcPasswordHash: "{ARGON2}"

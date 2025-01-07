@@ -1,0 +1,20 @@
+---
+- name: put download files
+  copy:
+    src: "{{ item.src }}"
+    dest: "{{ download_dir }}/{{ item.dest }}"
+  loop:
+  - src: "{{ hive_safe_ca_dir }}/cacert.pem"
+    dest: "cacert.pem"
+- name: build scep-client
+  shell: |
+    GOOS=linux GOARCH=amd64 
+    go build -ldflags "
+    -X main.flServerURL=http://scep-server.nsag-dev.procube-demo.jp:13000/scep 
+    -X main.flPKeyFileName=key.pem 
+    -X main.flCertFileName=cert.pem 
+    -X main.flKeySize=2048 
+    -X main.flOrg=Procube 
+    -X main.flCountry=JP 
+    -X main.flDNSName=sw-listener.nsag-dev.procube-demo.jp 
+    " -o ./download/scepclient-sw /app/cmd/scepclient

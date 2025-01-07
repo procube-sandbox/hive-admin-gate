@@ -1,0 +1,68 @@
+- name: check user
+  ansible.netcommon.telnet_aoi:
+    user: "{{ cs_obj.ansibleID }}"
+    password: "{{ cs_obj.ansiblePassword }}"
+    login_prompt:
+      - "login: "
+    password_prompt:
+      - "Password:"
+    prompts:
+      - "[>#]"
+    command:
+      - configure
+      - show system login user {{ cs_obj[loop_protocol ~ 'ID'] }}
+    timeout: 10
+  register: result_check_user
+
+- name: Extract lines containing a specific string
+  set_fact:
+    encrypted_password: authentication encrypted-password {{ u_pass }}
+    command_for_user: set system login user {{ u_name }}
+  vars:
+    u_name: "{{ cs_obj[loop_protocol ~ 'ID'] }}"
+    u_pass: "{{ cs_obj[loop_protocol ~ 'Password'] | password_hash('sha512') }}"
+
+- name: create user
+  ansible.netcommon.telnet_aoi:
+    username: "{{ cs_obj.ansibleID }}"
+    password: "{{ cs_obj.ansiblePassword }}"
+    login_prompt:
+      - "login: "
+    password_prompt:
+      - "Password:"
+    prompts:
+      - "[>#]"
+    command:
+      - configure 
+      - "{{ command_for_user }} class super-user {{ encrypted_password }}"
+      - commit
+    timeout: 10
+  when: "'authentication' not in result_check_user.stdout"
+
+- name: update user
+  ansible.netcommon.telnet_aoi:
+    username: "{{ cs_obj.ansibleID }}"
+    password: "{{ cs_obj.ansiblePassword }}"
+    login_prompt:
+      - "login: "
+    password_prompt:
+      - "Password:"
+    prompts:
+      - "[>#]"
+    command:
+      - configure
+      - "{{ command_for_user }} {{ encrypted_password }}"
+      - commit
+    timeout: 10
+  when: "'authentication' in result_check_user.stdout"
+
+- name: remote login linux shell admin-exec
+  expect:
+    command: ssh -o StrictHostKeyChecking=no -l "{{ cs_obj[loop_protocol ~ 'ID'] }}" "{{ hostname }}"
+    responses:
+      ".*[Pp]assword:.*": "{{ cs_obj[loop_protocol ~ 'Password'] }}"
+    timeout: 10
+  changed_when: false
+  vars:
+    ansible_connection: local
+

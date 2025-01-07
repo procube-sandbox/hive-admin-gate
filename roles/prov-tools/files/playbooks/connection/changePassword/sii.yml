@@ -1,0 +1,67 @@
+- name: check user
+  seiko.smartcs.smartcs_command:
+    commands:
+      - "show user"
+  vars:
+    ansible_connection: network_cli
+    ansible_network_os: seiko.smartcs.smartcs
+    ansible_become: yes
+    ansible_become_method: enable
+    ansible_become_password: "\n"
+   # ansible_user: "{{ cs_obj.ansibleID }}"
+   # ansible_password: "{{ cs_obj.ansiblePassword }}"
+  register: command_output
+
+- name: Extract lines containing a specific string
+  set_fact:
+    result_check_user: "{{ command_output.stdout_lines | select('search', search_string) }}"
+  vars:
+    search_string: ".*{{ cs_obj[loop_protocol ~ 'ID'] }}.*"
+
+
+- name: create user
+  seiko.smartcs.smartcs_config:
+    lines:
+      -  "create user {{ cs_obj[loop_protocol ~ 'ID'] }} group normal encrypt {{ cs_obj[loop_protocol ~ 'Password'] | password_hash('md5') }}"
+  vars:
+    ansible_connection: network_cli
+    ansible_network_os: seiko.smartcs.smartcs
+    ansible_become: yes
+    ansible_become_method: enable
+    ansible_become_password: "\n"
+  when: result_check_user | length == 0
+
+- name: update user
+  seiko.smartcs.smartcs_config:
+    lines:
+      - "set user {{ cs_obj[loop_protocol ~ 'ID'] }} encrypt {{ cs_obj[loop_protocol ~ 'Password'] | password_hash('md5') }}"
+  vars:
+    ansible_connection: network_cli
+    ansible_network_os: seiko.smartcs.smartcs
+    ansible_become: yes
+    ansible_become_method: enable
+    ansible_become_password: "\n" 
+  when: result_check_user | length > 0
+
+- name: remote login linux shell admin-exec
+  expect:
+    command: ssh -o StrictHostKeyChecking=no -l "{{ cs_obj[loop_protocol ~ 'ID'] }}" "{{ hostname }}"
+    responses:
+      ".*[Pp]assword:.*": "{{ cs_obj[loop_protocol ~ 'Password'] }}"
+    timeout: 10
+  changed_when: false
+  vars:
+    ansible_connection: local
+
+- name: save command
+  seiko.smartcs.smartcs_command:
+    commands:
+    - command: 'write'
+      prompt: 'Do you really want to write internal & external startup1 \[y/n\] ?'
+      answer: 'y'
+  vars:
+    ansible_connection: network_cli
+    ansible_network_os: seiko.smartcs.smartcs
+    ansible_become: yes
+    ansible_become_method: enable
+    ansible_become_password: "\n"

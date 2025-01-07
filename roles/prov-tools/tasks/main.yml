@@ -1,0 +1,136 @@
+---
+- name: setup python3
+  yum:
+    name:
+    - python39
+    - python39-setuptools
+
+- name: make virtual env for provisioning tools
+  pip:
+    name:
+    - pip
+    virtualenv: /root/prov
+    virtualenv_command: /bin/python3.9 -m venv
+    state: latest
+- name: install python modules for provisioning tools
+  pip:
+    name:
+    - ansible-core
+    - jxmlease
+    - requests
+    - connexion<3
+    - swagger-ui-bundle
+    - python_dateutil
+    - openpyxl
+    - cryptography
+    - dictdiffer==0.8.1
+    - PyMySQL==0.10.1
+    - lxml
+    virtualenv: /root/prov
+  environment:
+    LANG: "en_US.UTF-8"
+- name: prepare ansible directory
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: 0755
+  loop:
+  - /etc/ansible/hosts/group_vars
+  - /root/.ssh
+- name: install files
+  copy:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+  loop:
+  - src: plugins
+    dest: /root/.ansible/
+  - src: ansible.cfg
+    dest: /etc/ansible
+  - src: hosts
+    dest: /etc/ansible/
+  - src: playbooks
+    dest: /root/
+  # - src: templates
+  #   dest: /root/
+  - src: task_executer
+    dest: /root/
+  # - src: swagger_server
+  #   dest: /root/
+  - src: task-executer.service
+    dest: /usr/lib/systemd/system/
+  - src: TenantProvisioningMessage.js
+    dest: /usr/local/NetSoarer/IDManager/BindBroker/messagetable/
+  - src: "{{ saml_certs_dir }}"
+    dest: /root/
+  - src: ssh_config
+    dest: /root/.ssh/config
+- name: install file with mode
+  copy:
+    src: passwordChange.sh
+    dest: /root/
+    mode: 0755
+- name: install group variable definition
+  copy:
+    dest: "/etc/ansible/hosts/group_vars/all.yml"
+    content: "{{ all_vars | to_nice_yaml(indent=2) }}"
+- name: active virtualenv on .bashrc
+  lineinfile:
+    path: /root/.bashrc
+    line: source /root/prov/bin/activate
+- name: enable task executer service
+  service: name=task-executer.service enabled=yes
+- name: setup certificate for docker-client
+  include_tasks:
+    file: cert.yml
+  vars:
+    CN: idm
+    hive_safe_ca_dir: "{{ hive_context_dir }}/ca"
+    cert_dir: /root/cert
+    cert_dir_local: "{{ hive_context_dir }}/ca"
+    sub_prefix: "/DC={{ hive_name.split('.') | reverse | join('/DC=') }}/"
+- name: setup docker client
+  include_tasks:
+    file: docker-client.yml
+  vars:
+    home_dir: /root
+    venv: /root/prov
+    CN: idm
+    hive_safe_ca_dir: "{{ hive_context_dir }}/ca"
+    cert_dir_local: "{{ hive_context_dir }}/ca"
+    cert_dir: /root/cert
+- name: install ansible collections
+  shell: /root/prov/bin/ansible-galaxy collection install -r /root/task_executer/requirements.yml
+  register: register_ansible_galaxy_result
+  until: not register_ansible_galaxy_result.failed
+  retries: 3
+  delay: 10
+  args:
+    creates: /root/.ansible/collections/ansible_collections/ansible/posix
+- name: Install python module for admin-gate.
+  pip:
+    name:
+      - paramiko
+      - ansible-pylibssh
+      - passlib
+      - ncclient
+      - pexpect
+      - pywinrm
+      - pan-python
+      - pan-os-python
+  vars:
+    ansible_python_interpreter: /root/prov/bin/python
+- name: Setting cron for password change.
+  cron:
+    name: passwordChange
+    minute: "0"
+    hour: "1"
+    job: /root/passwordChange.sh
+- name: install files
+  copy:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+  loop:
+  - src: telnet_aoi.py
+    dest: /root/.ansible/collections/ansible_collections/ansible/netcommon/plugins/action/

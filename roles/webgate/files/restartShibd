@@ -1,0 +1,29 @@
+#!/bin/bash
+COUNT=1
+MAX_RETRY=20
+RETRY_INTERVAL=1
+RELOADED=false
+while [ $COUNT -le $MAX_RETRY ]; do
+  STATUS=$(systemctl is-active shibd  2>&1)
+  case "${STATUS}" in
+    "active" ) 
+      if ! MESSAGE=$(LD_LIBRARY_PATH=/opt/shibboleth/lib64 /usr/sbin/shibd -t 2>&1 | egrep 'CRIT Shibboleth\.Application : error building (MetadataProvider|CredentialResolver): Unable to.*file'); then
+        echo "INFO: $0: Trigger restart shibd." 1>&2
+        systemctl restart shibd shibfcgi
+        exit 0
+      fi
+      ;;
+    "inactive" )
+      echo "INFO: $0: The shibd is not active, so ignore restart request." 1>&2
+      exit 0
+      ;;
+    * )
+      MESSAGE="Status of shibd.service '${STATUS}' is not 'active'."
+      ;;
+  esac
+  sleep $RETRY_INTERVAL
+  COUNT=$(expr $COUNT + 1)
+done
+
+echo "ERROR: $0: Timed out for waiting configuration file for shibd test become ok:$MESSAGE." 1>&2
+exit 1

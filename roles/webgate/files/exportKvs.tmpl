@@ -1,0 +1,9 @@
+---
+webgate_kv:
+{{- range tree "/"}}
+  {{- if .Key | regexMatch "^(ifConfigs|routes|.*\\.lock$)" | not }}
+  - key: {{.Key|toJSON}}
+    value:
+{{.Value|parseJSON|toYAML|indent 6}}
+  {{- end}}
+{{- end}}

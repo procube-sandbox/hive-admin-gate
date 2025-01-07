@@ -1,0 +1,51 @@
+- name: setup python39
+  yum:
+    name:
+    - python39
+    - python39-setuptools
+    - "{{ 'python3-pyOpenSSL' if ansible_distribution == 'AlmaLinux' else 'pyOpenSSL' }}"
+- name: update to use python3 version
+  file:
+    src: /usr/bin/python3.9
+    dest: /etc/alternatives/python3
+    state: link
+    force: true
+- name: make virtual env for provisioning tools
+  pip:
+    name:
+    - pip
+    - wheel
+    state: latest
+    virtualenv: /root/consul
+    virtualenv_command: /bin/python3.9 -m venv
+- name: install python-consul, ansible-core
+  pip:
+    name:
+    - python-consul
+    - ansible-core
+    virtualenv: /root/consul
+  environment:
+    LANG: "en_US.UTF-8"
+- name: active virtualenv on .bashrc
+  lineinfile:
+    path: /root/.bashrc
+    line: source /root/consul/bin/activate
+- name: install community.crypto collection
+  shell: /bin/bash -lc 'ansible-galaxy collection install community.crypto community.general'
+  args:
+    creates: /root/.ansible/collections/ansible_collections/community/crypto
+  vars:
+    ansible_python_interpreter: /root/consul/bin/python
+- name: ensure .ansible/plugins/modules directory
+  file:
+    path: /root/.ansible/plugins/modules
+    state: directory
+- name: install files
+  copy:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+  loop:
+  - src: ../../../lib/powerdns_record.py
+    dest: /root/.ansible/plugins/modules
+  - src: acme.yml
+    dest: /root/

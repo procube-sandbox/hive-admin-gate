@@ -1,0 +1,122 @@
+---
+- name: Provisioning to user account.
+  hosts: connections
+  gather_facts: false
+  serial: 1
+  vars:
+    ansible_host: "{{ hostname }}"
+    ansible_python_interpreter: /root/prov/bin/python
+    username: guacadmin
+    password: guacadmin
+    cs_obj: "{{ hostvars[connectionSpecification] }}"
+    ansible_user: "{{ cs_obj.ansibleID }}"
+    ansible_password: "{{ cs_obj.ansiblePassword }}"
+
+  tasks:
+  - name: Get token of REST API.
+    uri:
+      url: "http://guacamole:8080/guacamole/api/tokens"
+      headers:
+        Content-Type: "application/x-www-form-urlencoded"
+      method: POST
+      body: 'username={{ username }}&password={{ password }}'
+      validate_certs: false
+      return_content: yes
+      status_code: 200
+    register: token
+    vars:
+      ansible_connection: local
+  - name: Get Connections.
+    uri:
+      url: "http://guacamole:8080/guacamole/api/session/data/postgresql/connections"
+      headers:
+        Guacamole-Token: "{{ token.json.authToken }}"
+      method: GET
+      validate_certs: false
+      return_content: yes
+      status_code: 200
+    register: guacamole_connections
+    vars:
+      ansible_connection: local
+  - name: Get Connection parameter.
+    uri:
+      url: "http://guacamole:8080/guacamole/api/session/data/postgresql/connections/{{ guacamole_connection_id }}/parameters"
+      headers:
+        Guacamole-Token: "{{ token.json.authToken }}"
+      method: GET
+      validate_certs: false
+      return_content: yes
+      status_code: 200
+    register: guacamole_connection_parameters
+    vars:
+      ansible_connection: local
+    loop: "{{ guacamole_connections.json | dict2items | selectattr('value.idmIdentifier', 'eq', id) | map(attribute='key') | list }}"
+    loop_control:
+      loop_var: guacamole_connection_id
+  - block:
+    - name: Change password.
+      include_tasks:
+        file: "connection/changePassword/{{ cs_obj.osType }}.yml"
+      when: cs_obj[loop_protocol] and check_change and check_defined
+      vars:
+        parameters_json: "{{ guacamole_connection_parameters.results | map(attribute='json') | list }}"
+        check_defined: "{{ loop_protocol ~ 'ID' in cs_obj and loop_protocol ~ 'Password' in cs_obj }}"
+        check_change: >
+          {{
+            parameters_json |
+            selectattr('username', 'defined') |
+            selectattr('username', 'eq', cs_obj[loop_protocol ~ 'ID'] | default('')) |
+            selectattr('password', 'defined') |
+            selectattr('password', 'eq', cs_obj[loop_protocol ~ 'Password'] | default('')) |
+            list | length == 0
+          }}
+      loop:
+        - ssh
+        - rdp
+        - telnet
+        - http
+      loop_control:
+        loop_var: loop_protocol
+    - name: Register connection.
+      include_tasks:
+        file: "connection/register/{{ loop_protocol }}.yml"
+      when: cs_obj[loop_protocol] and check_change
+      vars:
+        parameters_json: "{{ guacamole_connection_parameters.results | map(attribute='json') | list }}"
+        check_change: >
+          {{
+            parameters_json |
+            selectattr('username', 'defined') |
+            selectattr('username', 'eq', cs_obj[loop_protocol ~ 'ID'] | default('')) |
+            selectattr('password', 'defined') |
+            selectattr('password', 'eq', cs_obj[loop_protocol ~ 'Password'] | default('')) |
+            selectattr('port', 'defined') |
+            selectattr('port', 'eq', cs_obj[loop_protocol ~ 'Port'] | default('')) |
+            list | length == 0
+          }}
+      loop:
+        - ssh
+        - rdp
+        - telnet
+        - http
+      loop_control:
+        loop_var: loop_protocol
+    ignore_unreachable: yes
+    rescue:
+    - name: Error.
+      debug:
+        msg: "{{ hostname }} is not registered."
+    - name: Register connection.
+      include_tasks:
+        file: "connection/register/{{ loop_protocol }}.yml"
+      when: cs_obj[loop_protocol]
+      vars:
+        parameters_json: "{{ guacamole_connection_parameters.results | map(attribute='json') | list }}"
+        check_change: "{{ parameters_json | selectattr('username', 'eq', cs_obj[loop_protocol ~ 'ID'] | default('')) | selectattr('password', 'eq', cs_obj[loop_protocol ~ 'Password'] | default('')) | selectattr('port', 'eq', cs_obj[loop_protocol ~ 'Port'] | default('')) | list | length == 0 }}"
+      loop:
+        - ssh
+        - rdp
+        - telnet
+        - http
+      loop_control:
+        loop_var: loop_protocol

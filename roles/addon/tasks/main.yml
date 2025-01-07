@@ -1,0 +1,39 @@
+---
+# - name: Copy shell script for proxy settings.
+#   copy:
+#     src: proxy.sh
+#     dest: /home/admin/proxy.sh
+#     mode: 0644
+#     owner: root
+#     group: root
+# - name: Execute shell script for proxy settings.
+#   shell: sh /home/admin/proxy.sh
+- name: delete GPG key
+  rpm_key:
+    state: absent
+    key: /etc/pki/rpm-gpg/RPM-GPG-KEY-AlmaLinux
+- name: import GPG key
+  rpm_key:
+    state: present
+    key: https://repo.almalinux.org/almalinux/RPM-GPG-KEY-AlmaLinux
+- import_role:
+    name: webgate-files
+  when: inventory_hostname in groups['hives']
+# - import_role:
+#     name: ddclient
+#   when:
+#     - inventory_hostname in (groups['hives'] | list)
+#     - credentials.ddclient[ddclient_fqdn] is defined
+# - name: put build guide
+#   local_action:
+#     module: template
+#     src: "BUILD-j2.md"
+#     dest: "{{ hive_root_dir }}/docs/BUILD-{{ hive_stage }}.md"
+#   tags:
+#   - never
+#   - build-guide
+#   become: False
+#   run_once: True
+- import_role:
+    name: disable-TX-offload
+  when: hive_provider == 'kickstart'

@@ -1,0 +1,113 @@
+---
+- delegate_to: localhost
+  block:
+  - name: Get token of REST API.
+    uri:
+      url: "http://guacamole:8080/guacamole/api/tokens"
+      headers:
+        Content-Type: "application/x-www-form-urlencoded"
+      method: POST
+      body: 'username={{ username }}&password={{ password }}'
+      validate_certs: false
+      return_content: yes
+      status_code: 200
+    register: token
+  
+  - name: Get Connections.
+    uri:
+      url: "http://guacamole:8080/guacamole/api/session/data/postgresql/connections"
+      headers:
+        Guacamole-Token: "{{ token.json.authToken }}"
+      method: GET
+      validate_certs: false
+      return_content: yes
+      status_code: 200
+    register: guacamole_connections
+  - name: Set fact to target connection id.
+    set_fact:
+      connectionidrdp: "{{ item.key }}"
+    when: item.value.idmIdentifier == id and item.value.protocol == 'rdp'
+    loop: "{{ guacamole_connections.json | dict2items }}"
+    loop_control:
+      label: "{{ item.key }}"
+  
+  - name: Put connection.
+    uri:
+      url: "http://guacamole:8080/guacamole/api/session/data/postgresql/connections/{{ connectionidrdp }}"
+      headers:
+        Guacamole-Token: "{{ token.json.authToken }}"
+        Content-Type: "application/json"
+      method: PUT
+      body_format: json
+      body:
+        name: "{{ hostname }}:{{ id }}-rdp"
+        parentIdentifier: ROOT
+        protocol: "rdp"
+        idmIdentifier: "{{ id }}"
+        parameters:
+          port: "{{ cs_obj.rdpPort | default('') }}"
+          create-recording-path: "true"
+          recording-path: "${HISTORY_PATH}/${HISTORY_UUID}"
+          username: "{{ cs_obj.rdpID | default(None) }}"
+          password: "{{ cs_obj.rdpPassword | default(None) }}"
+          hostname: "{{ hostname }}"
+          swcZone: "{{ swcZone | join(',') | default('') }}"
+          ignore-cert: "true"
+        attributes:
+          remark: "{{ remark | default('') }}"
+          max-connections: "0"
+          max-connections-per-user: "0"
+          weight: ""
+          failover-only: ""
+          guacd-port: ""
+          guacd-encryption: ""
+      validate_certs: false
+      status_code: 204
+    when: prov_operation != 'delete' and connectionidrdp is defined
+  
+  - name: Post connection.
+    uri:
+      url: "http://guacamole:8080/guacamole/api/session/data/postgresql/connections"
+      headers:
+        Guacamole-Token: "{{ token.json.authToken }}"
+        Content-Type: "application/json"
+      method: POST
+      body_format: json
+      body:
+        name: "{{ hostname }}:{{ id }}-rdp"
+        parentIdentifier: ROOT
+        protocol: "rdp"
+        idmIdentifier: "{{ id }}"
+        parameters:
+          port: "{{ cs_obj.rdpPort | default('') }}"
+          create-recording-path: "true"
+          recording-path: "${HISTORY_PATH}/${HISTORY_UUID}"
+          username: "{{ cs_obj.rdpID | default(None) }}"
+          password: "{{ cs_obj.rdpPassword | default(None) }}"
+          hostname: "{{ hostname }}"
+          swcZone: "{{ swcZone | join(',') | default('') }}"
+          ignore-cert: "true"
+        attributes:
+          remark: "{{ remark | default('') }}"
+          max-connections: "0"
+          max-connections-per-user: "0"
+          weight: ""
+          failover-only: ""
+          guacd-port: ""
+          guacd-encryption: ""
+      validate_certs: false
+      return_content: yes
+      status_code: 200
+    when: connectionidrdp is not defined
+    register: new_connection
+  
+  - name: Delete connection.
+    uri:
+      url: "http://guacamole:8080/guacamole/api/session/data/postgresql/connections/{{ connectionidrdp }}"
+      headers:
+        Guacamole-Token: "{{ token.json.authToken }}"
+      method: DELETE
+      validate_certs: false
+      status_code: 204
+    when: prov_operation == 'delete' and connectionidrdp is defined
+  

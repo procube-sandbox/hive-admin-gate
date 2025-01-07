@@ -1,0 +1,550 @@
+<flow xmlns="http://www.springframework.org/schema/webflow" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.springframework.org/schema/webflow http://www.springframework.org/schema/webflow/spring-webflow.xsd"
+    parent="authn.abstract, authn/conditions">
+
+    <decision-state id="CheckPrevResult">
+        <on-entry>
+            <evaluate expression="CanonicalUsernameStrategy.apply(opensamlProfileRequestContext)" result="requestScope.canonicalUsername" />
+        </on-entry>
+        <if test="requestScope.canonicalUsername == null" then="DisplayTotpForm" else="SetUser" />
+    </decision-state>
+
+    <action-state id="SetUser">
+        <on-entry>
+            <evaluate expression="opensamlProfileRequestContext.getSubcontext(T(net.shibboleth.idp.authn.context.AuthenticationContext))" result="requestScope.authenticationContext" />
+            <evaluate expression="requestScope.authenticationContext.getSubcontext(T(jp.procube.security.authn.totp.api.context.TokenUserContext), true)" result="requestScope.tuContext" />
+            <evaluate expression="requestScope.tuContext.setUsername(requestScope.canonicalUsername)" />
+        </on-entry>
+
+        <evaluate expression="'proceed'" />
+
+        <transition on="proceed" to="PrepareMyAccount" />
+    </action-state>
+
+    <action-state id="PrepareMyAccount">
+        <on-entry>
+            <evaluate expression="TotpUsersSecurityConfigChecker.retrieve(requestScope.tuContext)" result="requestScope.myacct" />
+        </on-entry>
+
+        <evaluate expression="'proceed'" />
+
+        <transition on="proceed" to="CheckEachUserMode" />
+    </action-state>
+
+    <decision-state id="CheckIfConfigured">
+        <if test="requestScope.tuContext.totpWay == T(jp.procube.security.authn.totp.TotpConstants.TotpWay).LOSTCHILD" then="CheckTotpOption" else="CheckEachUserMode" />
+    </decision-state>
+
+    <decision-state id="CheckEachUserMode">
+        <if test="TotpEachUserFlag" then="CheckUsersTotpAuthOn" else="CheckIfSeedRegistered" />
+    </decision-state>
+
+    <decision-state id="CheckUsersTotpAuthOn">
+        <if test="requestScope.myacct.isUseTotpAuth()" then="CheckIfSeedRegistered" else="TotpSkip" />
+    </decision-state>
+
+    <decision-state id="CheckIfSeedRegistered">
+        <if test="TotpUsersSeedChecker.getUsersSeedsSize(requestScope.tuContext) &gt; 0" then="SelectPrepareTotpAuth" else="DisplayRegisteringToken" />
+    </decision-state>
+
+    <decision-state id="SelectOndemandGenerateToken">
+        <if test="requestScope.tuContext.totpWay == T(jp.procube.security.authn.totp.TotpConstants.TotpWay).MAIL ||
+                  requestScope.tuContext.totpWay == T(jp.procube.security.authn.totp.TotpConstants.TotpWay).SMS ||
+                  requestScope.tuContext.totpWay == T(jp.procube.security.authn.totp.TotpConstants.TotpWay).IVR"
+            then="OndemandGenerateToken" else="SelectPrepareTotpAuth" />
+    </decision-state>
+
+    <action-state id="OndemandGenerateToken">
+        <evaluate expression="GenerateNewToken" />
+        <evaluate expression="'proceed'" />
+
+        <transition on="proceed" to="SelectPrepareTotpAuth" />
+    </action-state>
+
+    <action-state id="SelectPrepareTotpAuth">
+        <evaluate expression="requestScope.tuContext.totpWay" />
+
+        <transition on="SMS" to="PrepareTotpAuthSMS" />
+        <transition on="IVR" to="PrepareTotpAuthIVR" />
+        <transition on="APP" to="DisplayTotpForm" />
+        <transition on="MAIL" to="PrepareTotpAuthMail" />
+        <transition on="LOSTCHILD" to="CheckTotpOption" />
+    </action-state>
+
+    <decision-state id="CheckTotpOption">
+        <if test="TotpUseExternalSecondFactorSender" then="DisplayRegisteringWayOfSelection" else="SelectRegisteringTokenPage" />
+    </decision-state>
+
+    <action-state id="SelectRegisteringTokenPage">
+        <evaluate expression="totpDefaultTransition" />
+
+        <!-- transition on="SMS" to="PrepareTotpAuthSMS" / -->
+        <!-- transition on="IVR" to="PrepareTotpAuthIVR" / -->
+        <transition on="APP" to="DisplayRegisteringToken" />
+        <transition on="MAIL" to="DisplayRegisteringMailAddrForMail" />
+    </action-state>
+
+    <action-state id="PrepareTotpAuthSMS">
+        <evaluate expression="SendTotpToSMS.send(requestScope.tuContext)" />
+        <evaluate expression="'proceed'" />
+
+        <transition on="proceed" to="DisplayTotpForm" />
+    </action-state>
+
+    <action-state id="PrepareTotpAuthIVR">
+        <evaluate expression="SendTotpToIVR.send(requestScope.tuContext)" />
+        <evaluate expression="'proceed'" />
+
+        <transition on="proceed" to="DisplayTotpForm" />
+    </action-state>
+
+    <action-state id="PrepareTotpAuthMail">
+        <!-- evaluate expression="GenerateNewToken" / -->
+        <evaluate expression="SendTotpToMail.send(requestScope.tuContext)" />
+        <evaluate expression="'proceed'" />
+
+        <transition on="mailTransferFailure" to="DisplayTotpForm" />
+        <transition on="proceed" to="DisplayTotpForm" />
+    </action-state>
+
+    <!-- Display Token form -->
+    <view-state id="DisplayTotpForm" view="totp">
+        <on-render>
+            <!-- set name="flowScope.isRegisterEnabled" value=" 'true' " / -->
+            <evaluate expression="environment" result="viewScope.environment" />
+            <evaluate expression="opensamlProfileRequestContext" result="viewScope.profileRequestContext" />
+            <evaluate expression="opensamlProfileRequestContext.getSubcontext(T(net.shibboleth.idp.authn.context.AuthenticationContext))"
+                result="viewScope.authenticationContext" />
+            <evaluate expression="authenticationContext.getSubcontext(T(net.shibboleth.idp.authn.context.AuthenticationErrorContext))"
+                result="viewScope.authenticationErrorContext" />
+            <evaluate expression="authenticationContext.getSubcontext(T(jp.procube.security.authn.totp.api.context.TokenUserContext))"
+                result="viewScope.tokenUserContext" />
+            <evaluate expression="tokenUserContext.getSubcontext(T(jp.procube.security.authn.totp.api.context.TokenUserErrorContext))"
+                result="viewScope.tokenUserErrorContext" />
+            <evaluate expression="T(net.shibboleth.utilities.java.support.codec.HTMLEncoder)" result="viewScope.encoder" />
+            <evaluate expression="flowRequestContext.getExternalContext().getNativeRequest()" result="viewScope.request" />
+            <evaluate expression="flowRequestContext.getExternalContext().getNativeResponse()" result="viewScope.response" />
+            <evaluate
+                expression="flowRequestContext.getActiveFlow().getApplicationContext().containsBean('shibboleth.CustomViewContext') ? flowRequestContext.getActiveFlow().getApplicationContext().getBean('shibboleth.CustomViewContext') : null"
+                result="viewScope.custom" />
+            <evaluate expression="nsamFileExistsTool" result="viewScope.fileExists" />
+        </on-render>
+
+        <!-- transition on="GenerateTokenSecrets" to="GenerateTokenSecrets" /-->
+        <transition on="ReSendTotpMail" to="PrepareTotpAuthMail">
+          <evaluate expression="authenticationContext.removeSubcontext(T(net.shibboleth.idp.authn.context.AuthenticationErrorContext))" />
+          <evaluate expression="tokenUserContext.removeSubcontext(T(jp.procube.security.authn.totp.api.context.TokenUserErrorContext))" />
+          <evaluate expression="tokenUserContext" result="requestScope.tuContext" />
+        </transition>
+        <transition on="proceed" to="ValidateTotpToken">
+          <evaluate expression="authenticationContext.removeSubcontext(T(net.shibboleth.idp.authn.context.AuthenticationErrorContext))" />
+          <evaluate expression="tokenUserContext.removeSubcontext(T(jp.procube.security.authn.totp.api.context.TokenUserErrorContext))" />
+        </transition>
+    </view-state>
+
+    <view-state id="DisplayRegisteringWayOfSelection" view="totp-registering-selector">
+        <on-render>
+            <evaluate expression="environment" result="viewScope.environment" />
+            <evaluate expression="opensamlProfileRequestContext" result="viewScope.profileRequestContext" />
+            <evaluate expression="opensamlProfileRequestContext.getSubcontext(T(net.shibboleth.idp.authn.context.AuthenticationContext))"
+                result="viewScope.authenticationContext" />
+            <evaluate expression="T(net.shibboleth.utilities.java.support.codec.HTMLEncoder)" result="viewScope.encoder" />
+            <evaluate expression="flowRequestContext.getExternalContext().getNativeRequest()" result="viewScope.request" />
+            <evaluate expression="flowRequestContext.getExternalContext().getNativeResponse()" result="viewScope.response" />
+            <evaluate
+                expression="flowRequestContext.getActiveFlow().getApplicationContext().containsBean('shibboleth.CustomViewContext') ? flowRequestContext.getActiveFlow().getApplicationContext().getBean('shibboleth.CustomViewContext') : null"
+                result="viewScope.custom" />
+            <evaluate expression="nsamFileExistsTool" result="viewScope.fileExists" />
+            <evaluate expression="TotpSelectableTransition" result="viewScope.selectableTransition" />
+        </on-render>
+
+        <transition on="UseTotpAuthenticator" to="DisplayRegisteringToken" />
+        <transition on="UseTotpMail" to="DisplayRegisteringMailAddrForMail" />
+        <transition on="UseTotpIVR" to="DisplayRegisteringCellForIVR" />
+        <transition on="UseTotpSMS" to="DisplayRegisteringCellForSMS" />
+
+    </view-state>
+
+    <view-state id="DisplayRegisteringToken" view="totp-register">
+        <on-render>
+            <evaluate expression="GenerateNewToken" />
+            <evaluate expression="environment" result="viewScope.environment" />
+            <evaluate expression="opensamlProfileRequestContext" result="viewScope.profileRequestContext" />
+            <evaluate expression="opensamlProfileRequestContext.getSubcontext(T(net.shibboleth.idp.authn.context.AuthenticationContext))"
+                result="viewScope.authenticationContext" />
+            <evaluate expression="authenticationContext.getSubcontext(T(net.shibboleth.idp.authn.context.AuthenticationErrorContext))"
+                result="viewScope.authenticationErrorContext" />
+            <evaluate expression="T(net.shibboleth.utilities.java.support.codec.HTMLEncoder)" result="viewScope.encoder" />
+            <evaluate expression="flowRequestContext.getExternalContext().getNativeRequest()" result="viewScope.request" />
+            <evaluate expression="flowRequestContext.getExternalContext().getNativeResponse()" result="viewScope.response" />
+            <evaluate expression="T(java.net.URLEncoder)" result="requestScope.urlEncoder" />
+            <evaluate
+                expression="flowRequestContext.getActiveFlow().getApplicationContext().containsBean('shibboleth.CustomViewContext') ? flowRequestContext.getActiveFlow().getApplicationContext().getBean('shibboleth.CustomViewContext') : null"
+                result="viewScope.custom" />
+            <evaluate expression="nsamFileExistsTool" result="viewScope.fileExists" />
+            <evaluate expression="TotpSecondFactorSelectable" result="viewScope.secondFactorSelectable" />
+        </on-render>
+
+        <transition on="ReSelect" to="DisplayRegisteringWayOfSelection">
+          <evaluate expression="authenticationContext.removeSubcontext(T(net.shibboleth.idp.authn.context.AuthenticationErrorContext))" />
+        </transition>
+        <transition on="AccountError" to="DisplayRegisteringToken" />
+        <transition on="proceed" to="RegisterNewToken" />
+
+    </view-state>
+
+    <view-state id="DisplayRegisteringCellForSMS" view="totp-register-cell-sms">
+        <on-render>
+            <evaluate expression="environment" result="viewScope.environment" />
+            <evaluate expression="opensamlProfileRequestContext" result="viewScope.profileRequestContext" />
+            <evaluate expression="opensamlProfileRequestContext.getSubcontext(T(net.shibboleth.idp.authn.context.AuthenticationContext))"
+                result="viewScope.authenticationContext" />
+            <evaluate expression="T(net.shibboleth.utilities.java.support.codec.HTMLEncoder)" result="viewScope.encoder" />
+            <evaluate expression="flowRequestContext.getExternalContext().getNativeRequest()" result="viewScope.request" />
+            <evaluate expression="flowRequestContext.getExternalContext().getNativeResponse()" result="viewScope.response" />
+            <evaluate
+                expression="flowRequestContext.getActiveFlow().getApplicationContext().containsBean('shibboleth.CustomViewContext') ? flowRequestContext.getActiveFlow().getApplicationContext().getBean('shibboleth.CustomViewContext') : null"
+                result="viewScope.custom" />
+            <evaluate expression="nsamFileExistsTool" result="viewScope.fileExists" />
+        </on-render>
+
+        <transition on="ReSelect" to="DisplayRegisteringWayOfSelection">
+          <evaluate expression="authenticationContext.removeSubcontext(T(net.shibboleth.idp.authn.context.AuthenticationErrorContext))" />
+        </transition>
+        <transition on="proceed" to="PrepareRegisteringTokenSMS" />
+
+    </view-state>
+
+    <action-state id="PrepareRegisteringTokenSMS">
+        <on-entry>
+            <evaluate expression="opensamlProfileRequestContext.getSubcontext(T(net.shibboleth.idp.authn.context.AuthenticationContext))" result="requestScope.authenticationContext" />
+            <evaluate expression="requestScope.authenticationContext.getSubcontext(T(jp.procube.security.authn.totp.api.context.TokenUserContext))" result="requestScope.tuContext" />
+        </on-entry>
+        <evaluate expression="ExtractCellNumberFromForm" />
+        <evaluate expression="requestScope.tuContext.setTotpWay(T(jp.procube.security.authn.totp.TotpConstants.TotpWay).SMS)" />
+        <evaluate expression="GenerateNewToken" />
+        <evaluate expression="'proceed'" />
+        <transition on="proceed" to="SendTokenSMS" />
+    </action-state>
+
+    <action-state id="SendTokenSMS">
+        <on-entry>
+            <evaluate expression="opensamlProfileRequestContext.getSubcontext(T(net.shibboleth.idp.authn.context.AuthenticationContext))" result="requestScope.authenticationContext" />
+            <evaluate expression="requestScope.authenticationContext.getSubcontext(T(jp.procube.security.authn.totp.api.context.TokenUserContext))" result="requestScope.tuContext" />
+        </on-entry>
+        <evaluate expression="SendTotpToSMS.send(requestScope.tuContext)" />
+        <evaluate expression="'proceed'" />
+
+        <transition on="proceed" to="DisplayRegisteringTokenSMS" />
+    </action-state>
+
+    <view-state id="DisplayRegisteringTokenSMS" view="totp-register-sms">
+        <on-render>
+            <evaluate expression="environment" result="viewScope.environment" />
+            <evaluate expression="opensamlProfileRequestContext" result="viewScope.profileRequestContext" />
+            <evaluate expression="opensamlProfileRequestContext.getSubcontext(T(net.shibboleth.idp.authn.context.AuthenticationContext))"
+                result="viewScope.authenticationContext" />
+            <evaluate expression="authenticationContext.getSubcontext(T(net.shibboleth.idp.authn.context.AuthenticationErrorContext))"
+                result="viewScope.authenticationErrorContext" />
+            <evaluate expression="viewScope.authenticationContext.getSubcontext(T(jp.procube.security.authn.totp.api.context.TokenUserContext))"
+                result="viewScope.tuContext" />
+            <evaluate expression="T(net.shibboleth.utilities.java.support.codec.HTMLEncoder)" result="viewScope.encoder" />
+            <evaluate expression="flowRequestContext.getExternalContext().getNativeRequest()" result="viewScope.request" />
+            <evaluate expression="flowRequestContext.getExternalContext().getNativeResponse()" result="viewScope.response" />
+            <evaluate
+                expression="flowRequestContext.getActiveFlow().getApplicationContext().containsBean('shibboleth.CustomViewContext') ? flowRequestContext.getActiveFlow().getApplicationContext().getBean('shibboleth.CustomViewContext') : null"
+                result="viewScope.custom" />
+            <evaluate expression="nsamFileExistsTool" result="viewScope.fileExists" />
+        </on-render>
+
+        <transition on="ReSelect" to="DisplayRegisteringWayOfSelection">
+          <evaluate expression="authenticationContext.removeSubcontext(T(net.shibboleth.idp.authn.context.AuthenticationErrorContext))" />
+        </transition>
+        <transition on="ReSend" to="SendTokenSMS">
+          <evaluate expression="authenticationContext.removeSubcontext(T(net.shibboleth.idp.authn.context.AuthenticationErrorContext))" />
+        </transition>
+        <transition on="proceed" to="RegisterNewTokenSMS" />
+    </view-state>
+
+    <view-state id="DisplayRegisteringCellForIVR" view="totp-register-cell-ivr">
+        <on-render>
+            <evaluate expression="environment" result="viewScope.environment" />
+            <evaluate expression="opensamlProfileRequestContext" result="viewScope.profileRequestContext" />
+            <evaluate expression="opensamlProfileRequestContext.getSubcontext(T(net.shibboleth.idp.authn.context.AuthenticationContext))"
+                result="viewScope.authenticationContext" />
+            <evaluate expression="T(net.shibboleth.utilities.java.support.codec.HTMLEncoder)" result="viewScope.encoder" />
+            <evaluate expression="flowRequestContext.getExternalContext().getNativeRequest()" result="viewScope.request" />
+            <evaluate expression="flowRequestContext.getExternalContext().getNativeResponse()" result="viewScope.response" />
+            <evaluate
+                expression="flowRequestContext.getActiveFlow().getApplicationContext().containsBean('shibboleth.CustomViewContext') ? flowRequestContext.getActiveFlow().getApplicationContext().getBean('shibboleth.CustomViewContext') : null"
+                result="viewScope.custom" />
+            <evaluate expression="nsamFileExistsTool" result="viewScope.fileExists" />
+        </on-render>
+
+        <transition on="ReSelect" to="DisplayRegisteringWayOfSelection">
+          <evaluate expression="authenticationContext.removeSubcontext(T(net.shibboleth.idp.authn.context.AuthenticationErrorContext))" />
+        </transition>
+        <transition on="proceed" to="PrepareRegisteringTokenIVR" />
+
+    </view-state>
+
+    <action-state id="PrepareRegisteringTokenIVR">
+        <on-entry>
+            <evaluate expression="opensamlProfileRequestContext.getSubcontext(T(net.shibboleth.idp.authn.context.AuthenticationContext))" result="requestScope.authenticationContext" />
+            <evaluate expression="requestScope.authenticationContext.getSubcontext(T(jp.procube.security.authn.totp.api.context.TokenUserContext))" result="requestScope.tuContext" />
+        </on-entry>
+        <evaluate expression="ExtractCellNumberFromForm" />
+        <evaluate expression="requestScope.tuContext.setTotpWay(T(jp.procube.security.authn.totp.TotpConstants.TotpWay).IVR)" />
+        <evaluate expression="GenerateNewToken" />
+        <evaluate expression="'proceed'" />
+
+        <transition on="proceed" to="SendTokenIVR" />
+    </action-state>
+
+    <action-state id="SendTokenIVR">
+        <on-entry>
+            <evaluate expression="opensamlProfileRequestContext.getSubcontext(T(net.shibboleth.idp.authn.context.AuthenticationContext))" result="requestScope.authenticationContext" />
+            <evaluate expression="requestScope.authenticationContext.getSubcontext(T(jp.procube.security.authn.totp.api.context.TokenUserContext))" result="requestScope.tuContext" />
+        </on-entry>
+        <evaluate expression="SendTotpToIVR.send(requestScope.tuContext)" />
+        <evaluate expression="'proceed'" />
+
+        <transition on="proceed" to="DisplayRegisteringTokenIVR" />
+    </action-state>
+
+    <view-state id="DisplayRegisteringTokenIVR" view="totp-register-ivr">
+        <on-render>
+            <evaluate expression="environment" result="viewScope.environment" />
+            <evaluate expression="opensamlProfileRequestContext" result="viewScope.profileRequestContext" />
+            <evaluate expression="opensamlProfileRequestContext.getSubcontext(T(net.shibboleth.idp.authn.context.AuthenticationContext))"
+                result="viewScope.authenticationContext" />
+            <evaluate expression="authenticationContext.getSubcontext(T(net.shibboleth.idp.authn.context.AuthenticationErrorContext))"
+                result="viewScope.authenticationErrorContext" />
+            <evaluate expression="viewScope.authenticationContext.getSubcontext(T(jp.procube.security.authn.totp.api.context.TokenUserContext))"
+                result="viewScope.tuContext" />
+            <evaluate expression="T(net.shibboleth.utilities.java.support.codec.HTMLEncoder)" result="viewScope.encoder" />
+            <evaluate expression="flowRequestContext.getExternalContext().getNativeRequest()" result="viewScope.request" />
+            <evaluate expression="flowRequestContext.getExternalContext().getNativeResponse()" result="viewScope.response" />
+            <evaluate
+                expression="flowRequestContext.getActiveFlow().getApplicationContext().containsBean('shibboleth.CustomViewContext') ? flowRequestContext.getActiveFlow().getApplicationContext().getBean('shibboleth.CustomViewContext') : null"
+                result="viewScope.custom" />
+            <evaluate expression="nsamFileExistsTool" result="viewScope.fileExists" />
+        </on-render>
+
+        <transition on="ReSelect" to="DisplayRegisteringWayOfSelection">
+          <evaluate expression="authenticationContext.removeSubcontext(T(net.shibboleth.idp.authn.context.AuthenticationErrorContext))" />
+        </transition>
+        <transition on="ReSend" to="SendTokenIVR">
+          <evaluate expression="authenticationContext.removeSubcontext(T(net.shibboleth.idp.authn.context.AuthenticationErrorContext))" />
+        </transition>
+        <transition on="proceed" to="RegisterNewTokenIVR" />
+    </view-state>
+
+    <view-state id="DisplayRegisteringMailAddrForMail" view="totp-register-mailaddr-mail">
+        <on-render>
+            <evaluate expression="environment" result="viewScope.environment" />
+            <evaluate expression="opensamlProfileRequestContext" result="viewScope.profileRequestContext" />
+            <evaluate expression="opensamlProfileRequestContext.getSubcontext(T(net.shibboleth.idp.authn.context.AuthenticationContext))"
+                result="viewScope.authenticationContext" />
+            <evaluate expression="viewScope.authenticationContext.getSubcontext(T(jp.procube.security.authn.totp.api.context.TokenUserContext))"
+                result="viewScope.tuContext" />
+            <evaluate expression="T(net.shibboleth.utilities.java.support.codec.HTMLEncoder)" result="viewScope.encoder" />
+            <evaluate expression="flowRequestContext.getExternalContext().getNativeRequest()" result="viewScope.request" />
+            <evaluate expression="flowRequestContext.getExternalContext().getNativeResponse()" result="viewScope.response" />
+            <evaluate
+                expression="flowRequestContext.getActiveFlow().getApplicationContext().containsBean('shibboleth.CustomViewContext') ? flowRequestContext.getActiveFlow().getApplicationContext().getBean('shibboleth.CustomViewContext') : null"
+                result="viewScope.custom" />
+            <evaluate expression="nsamFileExistsTool" result="viewScope.fileExists" />
+            <evaluate expression="TotpSecondFactorSelectable" result="viewScope.secondFactorSelectable" />
+        </on-render>
+
+        <transition on="ReSelect" to="DisplayRegisteringWayOfSelection">
+          <evaluate expression="authenticationContext.removeSubcontext(T(net.shibboleth.idp.authn.context.AuthenticationErrorContext))" />
+        </transition>
+        <transition on="proceed" to="PrepareRegisteringTokenMail" />
+
+    </view-state>
+
+    <action-state id="PrepareRegisteringTokenMail">
+        <on-entry>
+            <evaluate expression="opensamlProfileRequestContext.getSubcontext(T(net.shibboleth.idp.authn.context.AuthenticationContext))" result="requestScope.authenticationContext" />
+            <evaluate expression="requestScope.authenticationContext.getSubcontext(T(jp.procube.security.authn.totp.api.context.TokenUserContext))" result="requestScope.tuContext" />
+            <evaluate expression="requestScope.tuContext.setTotpWay(T(jp.procube.security.authn.totp.TotpConstants.TotpWay).MAIL)" />
+        </on-entry>
+        <evaluate expression="ExtractMailAddressFromForm" />
+        <evaluate expression="GenerateNewToken" />
+        <evaluate expression="'proceed'" />
+        <transition on="proceed" to="SendTokenMail" />
+    </action-state>
+
+    <action-state id="SendTokenMail">
+        <on-entry>
+            <evaluate expression="opensamlProfileRequestContext.getSubcontext(T(net.shibboleth.idp.authn.context.AuthenticationContext))" result="requestScope.authenticationContext" />
+            <evaluate expression="requestScope.authenticationContext.getSubcontext(T(jp.procube.security.authn.totp.api.context.TokenUserContext))" result="requestScope.tuContext" />
+        </on-entry>
+        <evaluate expression="SendTotpToMail.send(requestScope.tuContext)" />
+        <evaluate expression="'proceed'" />
+
+        <transition on="mailTransferFailure" to="DisplayRegisteringMailAddrForMail" />
+        <transition on="proceed" to="DisplayRegisteringTokenMail" />
+    </action-state>
+
+    <view-state id="DisplayRegisteringTokenMail" view="totp-register-mail">
+        <on-render>
+            <evaluate expression="environment" result="viewScope.environment" />
+            <evaluate expression="opensamlProfileRequestContext" result="viewScope.profileRequestContext" />
+            <evaluate expression="opensamlProfileRequestContext.getSubcontext(T(net.shibboleth.idp.authn.context.AuthenticationContext))"
+                result="viewScope.authenticationContext" />
+            <evaluate expression="authenticationContext.getSubcontext(T(net.shibboleth.idp.authn.context.AuthenticationErrorContext))"
+                result="viewScope.authenticationErrorContext" />
+            <evaluate expression="viewScope.authenticationContext.getSubcontext(T(jp.procube.security.authn.totp.api.context.TokenUserContext))"
+                result="viewScope.tuContext" />
+            <evaluate expression="T(net.shibboleth.utilities.java.support.codec.HTMLEncoder)" result="viewScope.encoder" />
+            <evaluate expression="flowRequestContext.getExternalContext().getNativeRequest()" result="viewScope.request" />
+            <evaluate expression="flowRequestContext.getExternalContext().getNativeResponse()" result="viewScope.response" />
+            <evaluate
+                expression="flowRequestContext.getActiveFlow().getApplicationContext().containsBean('shibboleth.CustomViewContext') ? flowRequestContext.getActiveFlow().getApplicationContext().getBean('shibboleth.CustomViewContext') : null"
+                result="viewScope.custom" />
+            <evaluate expression="nsamFileExistsTool" result="viewScope.fileExists" />
+            <evaluate expression="TotpSecondFactorSelectable" result="viewScope.secondFactorSelectable" />
+        </on-render>
+
+        <transition on="ReSelect" to="DisplayRegisteringWayOfSelection">
+          <evaluate expression="authenticationContext.removeSubcontext(T(net.shibboleth.idp.authn.context.AuthenticationErrorContext))" />
+        </transition>
+        <transition on="ReSend" to="SendTokenMail">
+          <evaluate expression="authenticationContext.removeSubcontext(T(net.shibboleth.idp.authn.context.AuthenticationErrorContext))" />
+        </transition>
+        <transition on="ReConfig" to="DisplayRegisteringMailAddrForMail">
+          <evaluate expression="authenticationContext.removeSubcontext(T(net.shibboleth.idp.authn.context.AuthenticationErrorContext))" />
+        </transition>
+        <transition on="proceed" to="RegisterNewTokenMail" />
+    </view-state>
+
+    <view-state id="DisplayRegisteringTokenComplete" view="totp-register-complete">
+        <on-render>
+            <evaluate expression="environment" result="viewScope.environment" />
+            <evaluate expression="opensamlProfileRequestContext" result="viewScope.profileRequestContext" />
+            <evaluate expression="opensamlProfileRequestContext.getSubcontext(T(net.shibboleth.idp.authn.context.AuthenticationContext))"
+                result="viewScope.authenticationContext" />
+            <evaluate expression="T(net.shibboleth.utilities.java.support.codec.HTMLEncoder)" result="viewScope.encoder" />
+            <evaluate expression="flowRequestContext.getExternalContext().getNativeRequest()" result="viewScope.request" />
+            <evaluate expression="flowRequestContext.getExternalContext().getNativeResponse()" result="viewScope.response" />
+            <evaluate
+                expression="flowRequestContext.getActiveFlow().getApplicationContext().containsBean('shibboleth.CustomViewContext') ? flowRequestContext.getActiveFlow().getApplicationContext().getBean('shibboleth.CustomViewContext') : null"
+                result="viewScope.custom" />
+            <evaluate expression="nsamFileExistsTool" result="viewScope.fileExists" />
+        </on-render>
+
+        <transition on="proceed" to="proceed" />
+
+    </view-state>
+
+<!--
+    <action-state id="ExtractTotpFromForm">
+        <evaluate expression="ExtractTotpFromForm" />
+        <evaluate expression="'proceed'" />
+
+        <transition on="InvalidCredentials" to="DisplayTotpForm" />
+        <transition on="proceed" to="TotpTokenValidator" />
+    </action-state>
+
+    <action-state id="GenerateTokenSecrets">
+        <evaluate expression="GenerateNewToken" />
+        <evaluate expression="'proceed'" />
+
+        <transition on="proceed" to="DisplayRegisteringToken" />
+    </action-state>
+-->
+
+    <action-state id="TotpSkip">
+        <evaluate expression="'proceed'" />
+        <transition on="proceed" to="proceed" />
+    </action-state>
+
+    <action-state id="ValidateTotpToken">
+        <evaluate expression="ExtractTotpFromForm" />
+        <evaluate expression="TotpTokenValidator" />
+        <evaluate expression="'proceed'" />
+
+        <transition on="InvalidCredentials" to="DisplayTotpForm" />
+        <transition on="NoCredentials" to="DisplayTotpForm" />
+        <!-- At the moment user is redirected back to the totp form is he/she hasn't registered token -->
+        <transition on="AccountError" to="DisplayTotpForm" />
+        <transition on="TokenCodeIsInvalid" to="DisplayTotpForm" />
+        <transition on="RequiredTokenRegistration" to="DisplayTotpForm" />
+        <transition on="TokenValidationFailed" to="DisplayTotpForm" />
+        <transition on="SysErrorOccurred" to="DisplayTotpForm" />
+
+        <transition on="proceed" to="proceed" />
+    </action-state>
+
+    <action-state id="RegisterNewToken">
+        <on-entry>
+            <evaluate expression="opensamlProfileRequestContext.getSubcontext(T(net.shibboleth.idp.authn.context.AuthenticationContext))" result="requestScope.authenticationContext" />
+            <evaluate expression="requestScope.authenticationContext.getSubcontext(T(jp.procube.security.authn.totp.api.context.TokenUserContext))" result="requestScope.tuContext" />
+            <evaluate expression="requestScope.tuContext.setTotpWay(T(jp.procube.security.authn.totp.TotpConstants.TotpWay).APP)" />
+        </on-entry>
+        <evaluate expression="ExtractTotpFromForm" />
+        <evaluate expression="RegisterNewToken" />
+        <evaluate expression="'proceed'" />
+
+        <transition on="InvalidCredentials" to="DisplayRegisteringToken" />
+        <transition on="NoCredentials" to="DisplayRegisteringToken" />
+        <transition on="AccountError" to="DisplayRegisteringToken" />
+        <transition on="TokenCodeIsInvalid" to="DisplayRegisteringToken" />
+        <transition on="RequiredTokenRegistration" to="DisplayRegisteringToken" />
+        <transition on="TokenValidationFailed" to="DisplayRegisteringToken" />
+        <transition on="SysErrorOccurred" to="DisplayRegisteringToken" />
+        <transition on="proceed" to="DisplayRegisteringTokenComplete" />
+    </action-state>
+
+    <action-state id="RegisterNewTokenSMS">
+        <evaluate expression="ExtractTotpFromForm" />
+        <evaluate expression="RegisterNewToken" />
+        <evaluate expression="'proceed'" />
+
+        <transition on="InvalidCredentials" to="DisplayRegisteringTokenSMS" />
+        <transition on="NoCredentials" to="DisplayRegisteringTokenSMS" />
+        <transition on="AccountError" to="DisplayRegisteringTokenSMS" />
+        <transition on="TokenCodeIsInvalid" to="DisplayRegisteringTokenSMS" />
+        <transition on="RequiredTokenRegistration" to="DisplayRegisteringTokenSMS" />
+        <transition on="TokenValidationFailed" to="DisplayRegisteringTokenSMS" />
+        <transition on="SysErrorOccurred" to="DisplayRegisteringTokenSMS" />
+        <transition on="proceed" to="DisplayRegisteringTokenComplete" />
+    </action-state>
+
+    <action-state id="RegisterNewTokenIVR">
+        <evaluate expression="ExtractTotpFromForm" />
+        <evaluate expression="RegisterNewToken" />
+        <evaluate expression="'proceed'" />
+
+        <transition on="InvalidCredentials" to="DisplayRegisteringTokenIVR" />
+        <transition on="NoCredentials" to="DisplayRegisteringTokenIVR" />
+        <transition on="AccountError" to="DisplayRegisteringTokenIVR" />
+        <transition on="TokenCodeIsInvalid" to="DisplayRegisteringTokenIVR" />
+        <transition on="RequiredTokenRegistration" to="DisplayRegisteringTokenIVR" />
+        <transition on="TokenValidationFailed" to="DisplayRegisteringTokenIVR" />
+        <transition on="SysErrorOccurred" to="DisplayRegisteringTokenIVR" />
+        <transition on="proceed" to="DisplayRegisteringTokenComplete" />
+    </action-state>
+
+    <action-state id="RegisterNewTokenMail">
+        <evaluate expression="ExtractTotpFromForm" />
+        <evaluate expression="RegisterNewToken" />
+        <evaluate expression="'proceed'" />
+
+        <transition on="InvalidCredentials" to="DisplayRegisteringTokenMail" />
+        <transition on="NoCredentials" to="DisplayRegisteringTokenMail" />
+        <transition on="AccountError" to="DisplayRegisteringTokenMail" />
+        <transition on="TokenCodeIsInvalid" to="DisplayRegisteringTokenMail" />
+        <transition on="RequiredTokenRegistration" to="DisplayRegisteringTokenMail" />
+        <transition on="TokenValidationFailed" to="DisplayRegisteringTokenMail" />
+        <transition on="SysErrorOccurred" to="DisplayRegisteringTokenMail" />
+        <transition on="proceed" to="DisplayRegisteringTokenComplete" />
+    </action-state>
+
+    <bean-import resource="Totp-beans.xml" />
+    <bean-import resource="../../../conf/authn/totp-authn-beans.xml" />
+
+</flow>

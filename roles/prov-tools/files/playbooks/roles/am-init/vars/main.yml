@@ -1,0 +1,322 @@
+---
+am_kv_rpOverride: >-
+  {%- set output_services = [] -%}
+  {%- for saml_sp in (saml_sps | default([])) -%}
+    {%- set _ = output_services.append({
+      "key": "nsam/" + tenantid + "/relyingPartyOverrides/" + saml_sp.published_name,
+      "value": {
+        "app_name": tenantid,
+        "config_name": "relyingPartyOverrides",
+        "id": saml_sp.published_name,
+        "relyingPartyIds": saml_sp.metadata | metadata2entityid,
+        "encryptAssertions": "true" if saml_sp.encryptAssertions | default(false) else "false",
+        "signResponses": "true" if saml_sp.signResponses | default(false) else "false",
+        "signAssertions": "true" if saml_sp.signAssertions | default(false) else "false"
+      }
+    }) -%}
+  {%- endfor -%}
+  {{ output_services }}
+
+am_kv_metadataFile: >-
+  {%- set output_services = [] -%}
+  {%- for saml_sp in (saml_sps_wg + (saml_sps | default([]))) -%}
+    {%- set _ = output_services.append({
+      "key": "nsam/" + tenantid + "/metadataFile/" + saml_sp.published_name,
+      "value": {
+        "app_name": tenantid,
+        "config_name": "metadataFile",
+        "metadataFileId": saml_sp.published_name,
+        "metadata": saml_sp.metadata
+      }
+    }) -%}
+  {%- endfor -%}
+  {{ output_services }}
+
+am_kv_samlAttributes: >-
+  {%- set attributes = [] -%}
+  {%- for saml_attr in (saml_attrs | default([])) -%}
+    {%- set _ = attributes.append({
+      "key": "nsam/" + tenantid + "/samlAttribute/" + saml_attr.attr_id,
+      "value": {
+        "app_name": tenantid,
+        "type": "Simple",
+        "attributeDefinitionId": saml_attr.attr_id,
+        "config_name": "samlAttribute",
+        "dependencyName": "idp",
+        "friendlyName": saml_attr.attr_id,
+        "saml1EncodeName": saml_attr.attr_id,
+        "saml2EncodeName": saml_attr.attr_id,
+        "sourceAttributeId": saml_attr.attr,
+        "additionalConfig": ""
+      }
+    }) -%}
+    {%- set _ = attributes.append({
+      "key": "nsam/" + tenantid + "/samlAttributeFilter/" + saml_attr.attr_id + "Allow",
+      "value": {
+        "app_name": tenantid,
+        "attributeDefinitionId": [saml_attr.attr_id],
+        "config_name": "samlAttributeFilter",
+        "policyId": saml_attr.attr_id + "Allow",
+        "additionalConfig": "",
+        "restriction": saml_sps | selectattr('saml_attrs_for_delivery', 'defined') | selectattr('saml_attrs_for_delivery', 'contains', saml_attr.attr_id) | map(attribute='metadata') | map('metadata2entityid') | list 
+      }
+    }) -%}
+  {%- endfor -%}
+  {{ attributes }}
+
+defaultSamlAttributes:
+- idmRole
+- name
+- passwdChangedDatetime
+- accountLock
+- uid
+
+defaultSamlSPs:
+- idm
+
+am_kv_common:
+  - key: nsam/{{ tenantid }}/samlCertificate
+    value:
+      app_name: "{{ tenantid }}"
+      config_name: samlCertificate
+      data1:
+        certificate: "{{ saml_cert }}"
+        privateKey: "{{ saml_key }}"
+        isPrimary: true
+      data2:
+        certificate: ""
+        privateKey: ""
+        isPrimary: false
+  - key: "nsam/{{ tenantid }}/baseConfig"
+    value:
+      app_name: "{{ tenantid }}"
+      attackProtect: true
+      config_name: baseConfig
+      inactivity: "PT{{ inactivity }}H"
+      lifetime: "PT{{ lifetime }}H"
+      failedCountLimitByUserid: "{{ failedCountLimitByUserid }}"
+      failedCountLimitBySrcIPAddr: "{{ failedCountLimitBySrcIPAddr }}"
+      expireSeconds: "{{ expireSeconds }}"
+      htmlLocalStorage: true
+      trackSPSessions: true
+      secondaryServiceIndex: true
+      additionalConfig: |
+        idp.session.consistentAddress=false
+        nsam.authn.devicemgmt.beforehandExpiringDuration=PT0S
+        idp.logout.elaboration=true
+  - key: "nsam/{{ tenantid }}/attackProtector"
+    value:
+      app_name: "{{ tenantid }}"
+      config_name: attackProtector
+      ipWhiteList: "{{ ipWhiteList | join(',') }}"
+  - key: "nsam/{{ tenantid }}/authmethod"
+    value:
+      app_name: "{{ tenantid }}"
+      config_name: authmethod
+      type: "{{ ['Periodic', authMethod] if usePeriodic | default(False) else [authMethod] }}"
+      periodicSessionAttribute:
+      - idmRole
+      - passwdChangedDatetime
+      - accountLock
+      internalAddress: ""
+      DBRecording: true
+      flowType: ""
+      extended: ""
+      mfaAuthmethod: PasswordTotp
+      usePeriodic: "{{ usePeriodic | default(False) }}"
+      eachUser: false
+      defaultTransition: APP
+      selectableTransition: []
+      allowOtherAuthn: false
+      otherAuthnFido: PasswordWithCookie
+  - key: "nsam/{{ tenantid }}/deviceManagementCookie"
+    value:
+      app_name: "{{ tenantid }}"
+      daysForExpire: "{{ daysForExpire | default(0) }}"
+      daysForCheckBeforeExpire: "0"
+      daysForExtendingLimit: "0"
+      config_name: deviceManagementCookie
+  - key: "nsam/{{ tenantid }}/ldap"
+    value:
+      app_name: "{{ tenantid }}"
+      baseDN: ou=Users,{{ dn_suffix }}
+      bindDN: cn=Manager,{{ dn_suffix }}
+      bindDNCredential: "{{ db_password }}"
+      config_name: ldap
+      connectTimeout: PT7S
+      hostname: ldap
+      port: 389
+      subtreeSearch: false
+      userFilter: "(&(accountLock=FALSE)(tenantid={{ tenantid }})(uid={user}))"
+  - key: "nsam/{{ tenantid }}/dataConnector/idp"
+    value:
+      app_name: "{{ tenantid }}"
+      baseDN: ou=Users,{{ dn_suffix }}
+      bindDN: cn=Manager,{{ dn_suffix }}
+      bindDNCredential: "{{ db_password }}"
+      config_name: dataConnector
+      connectTimeout: PT7S
+      id: idp
+      hostname: ldap
+      port: 389
+      subtreeSearch: false
+      additionalConfig: ""
+      filter: (uid=$requestContext.principalName)
+      type: LDAPDirectory
+  - key: "nsam/{{ tenantid }}/samlAttribute/idmRole"
+    value:
+      app_name: "{{ tenantid }}"
+      type: Simple
+      attributeDefinitionId: idmRole
+      config_name: samlAttribute
+      dependencyName: idp
+      friendlyName: idmRole
+      saml1EncodeName: idmRole
+      saml2EncodeName: idmRole
+      sourceAttributeId: idmRole
+      additionalConfig: ""
+  - key: "nsam/{{ tenantid }}/samlAttribute/name"
+    value:
+      app_name: "{{ tenantid }}"
+      type: Simple
+      attributeDefinitionId: name
+      config_name: samlAttribute
+      dependencyName: idp
+      friendlyName: name
+      saml1EncodeName: name
+      saml2EncodeName: name
+      sourceAttributeId: cn
+      additionalConfig: ""
+  - key: "nsam/{{ tenantid }}/samlAttribute/passwdChangedDatetime"
+    value:
+      app_name: "{{ tenantid }}"
+      type: Simple
+      attributeDefinitionId: passwdChangedDatetime
+      config_name: samlAttribute
+      dependencyName: idp
+      friendlyName: passwdChangedDatetime
+      saml1EncodeName: passwdChangedDatetime
+      saml2EncodeName: passwdChangedDatetime
+      sourceAttributeId: passwdChangedDatetime
+      additionalConfig: ""
+  - key: "nsam/{{ tenantid }}/samlAttribute/accountLock"
+    value:
+      app_name: "{{ tenantid }}"
+      type: Simple
+      attributeDefinitionId: accountLock
+      config_name: samlAttribute
+      dependencyName: idp
+      friendlyName: accountLock
+      saml1EncodeName: accountLock
+      saml2EncodeName: accountLock
+      sourceAttributeId: accountLock
+      additionalConfig: ""
+  - key: "nsam/{{ tenantid }}/samlAttribute/uid"
+    value:
+      app_name: "{{ tenantid }}"
+      type: Simple
+      attributeDefinitionId: uid
+      config_name: samlAttribute
+      dependencyName: idp
+      friendlyName: uid
+      saml1EncodeName: uid
+      saml2EncodeName: uid
+      sourceAttributeId: uid
+      additionalConfig: ""
+  - key: "nsam/{{ tenantid }}/samlAttributeFilter/idmRoleAllow"
+    value:
+      app_name: "{{ tenantid }}"
+      attributeDefinitionId:
+      - idmRole
+      config_name: samlAttributeFilter
+      policyId: idmRoleAllow
+      additionalConfig: ""
+      restriction:
+      - '*'
+  - key: "nsam/{{ tenantid }}/samlAttributeFilter/nameAllow"
+    value:
+      app_name: "{{ tenantid }}"
+      attributeDefinitionId:
+      - name
+      config_name: samlAttributeFilter
+      policyId: nameAllow
+      additionalConfig: ""
+      restriction:
+      - '*'
+  - key: "nsam/{{ tenantid }}/samlAttributeFilter/uidAllow"
+    value:
+      app_name: "{{ tenantid }}"
+      attributeDefinitionId:
+      - uid
+      config_name: samlAttributeFilter
+      policyId: uidAllow
+      additionalConfig: ""
+      restriction:
+      - '*'
+  - key: "nsam/{{ tenantid }}/samlAttributeFilter/passwdChangedDatetimeAllow"
+    value:
+      app_name: "{{ tenantid }}"
+      attributeDefinitionId:
+      - passwdChangedDatetime
+      config_name: samlAttributeFilter
+      policyId: passwdChangedDatetimeAllow
+      additionalConfig: ""
+      restriction:
+      - '*'
+  - key: "nsam/{{ tenantid }}/samlAttributeFilter/accountLockAllow"
+    value:
+      app_name: "{{ tenantid }}"
+      attributeDefinitionId:
+      - accountLock
+      config_name: samlAttributeFilter
+      policyId: accountLockAllow
+      additionalConfig: ""
+      restriction:
+      - '*'
+  - key: "nsam/{{ tenantid }}/samlNameId"
+    value:
+      app_name: "{{ tenantid }}"
+      config_name: samlNameId
+      defaultFormat: "urn:oasis:names:tc:SAML:1.1:nameid-format:unspecified"
+      persistentSourceAttribute: uid
+      persistentSalt: "dummyvalueforsalt"
+  # - key: "nsam/{{ tenantid }}/nameIdGenerators"
+  #   value: 
+  #     app_name: "{{ tenantid }}"
+  #     config_name: nameIdGenerators
+  #     attributeSourceFormat: "{{ saml_nameids | default([]) | map(attribute='nameid_format') | list }}"
+  #     attributeSourceAttributes: "{{ saml_nameids | default([]) | map(attribute='attr_id') | list }}"
+  #     generatorsOrder: attributeSourcedFirst
+  - key: "nsam/{{ tenantid }}/nameIdGenerators"
+    value: 
+      app_name: "{{ tenantid }}"
+      config_name: nameIdGenerators
+      attributeSourceFormat: 
+      - "urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress"
+      - "urn:mace:shibboleth:1.0:nameIdentifier"
+      - "urn:oasis:names:tc:SAML:1.1:nameid-format:unspecified"
+      - "urn:oasis:names:tc:SAML:2.0:nameid-format:persistent"
+      attributeSourceAttributes: 
+      - uid
+      - uid
+      - uid
+      - uid
+      generatorsOrder: attributeSourcedFirst
+am_kv_force_passwd:
+  - key: "nsam/{{ tenantid }}/forceRedirect"
+    value:
+      app_name: AccessManager
+      config_name: forceRedirect
+      enable: true
+      monitoringEnable: true
+      url: "https://idm.{{ domain }}/changePassword/changePassword?uid=%1$s&spid=%2$s&requiredOnly=TRUE&noPassword=FALSE"
+  - key: "nsam/{{ tenantid }}/monitoring/idp2_NetSoarer_monitoringService"
+    value:
+      app_name: AccessManager
+      config_name: forceRedirect
+      interval: "30"
+      monitoringEnable: true
+      monitoringServiceName: idp_NetSoarer_monitoringService
+      monitoringURL: https://idm.{{ domain }}/ChangePasswordApp/chk.jsp
+      type: HTTP
+am_kv: "{{ am_kv_common + am_kv_metadataFile + am_kv_samlAttributes + am_kv_rpOverride + ([] if pwAvailableDays == 0 else am_kv_force_passwd) }}"

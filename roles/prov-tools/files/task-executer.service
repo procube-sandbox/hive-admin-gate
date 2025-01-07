@@ -1,0 +1,15 @@
+[Unit]
+Description=FUN provisioning task executer
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+# we cannot split debug messsage and result json,
+# do not use ANSIBLE_DEBUG
+# Environment=IDMTE_DEBUG=True
+# Environment=ANSIBLE_CHECKMODE=True
+WorkingDirectory=/root
+ExecStart=/root/prov/bin/python -m task_executer
+
+[Install]
+WantedBy=multi-user.target

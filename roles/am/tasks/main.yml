@@ -1,0 +1,61 @@
+---
+# This role installs Access Manager 3
+- name: delete GPG key
+  rpm_key:
+    state: absent
+    key: /etc/pki/rpm-gpg/RPM-GPG-KEY-AlmaLinux
+- name: import GPG key
+  rpm_key:
+    state: present
+    key: https://repo.almalinux.org/almalinux/RPM-GPG-KEY-AlmaLinux
+- name: install epel repository
+  yum:
+    name: epel-release
+    state: present
+- name: install python package
+  yum:
+    name: python2-pip
+    state: present
+- name: install consul module
+  pip: name=python-consul state=present
+- name: install NetSoarer Access Manager 3
+  yum:
+    name:
+    - sudo
+    - initscripts
+    - NetSoarer-AccessManager2
+    - NetSoarer-AccessManager2-console
+    state: latest
+- name: create directory for patch to remove current config at boot time
+  file:
+    dest: /usr/lib/systemd/system/wildfly.service.d
+    state: directory
+    mode: 0755
+    owner: root
+    group: root
+- name: patch to remove current config at boot time
+  copy:
+    src: override.conf
+    dest: /usr/lib/systemd/system/wildfly.service.d/override.conf
+    mode: 0644
+    owner: root
+    group: root
+- name: enhance memory size of wildfly
+  lineinfile:
+    path: /opt/wildfly/bin/standalone.conf
+    regexp: '   JAVA_OPTS="-Xms64m -Xmx512m -XX:MetaspaceSize=\d+M -XX:MaxMetaspaceSize=\d+m -Djava\.net\.preferIPv4Stack=true"'
+    line: '   JAVA_OPTS="-Xms64m -Xmx512m -XX:MetaspaceSize=96M -XX:MaxMetaspaceSize=1024m -Djava.net.preferIPv4Stack=true"'
+- name: setup consul.json
+  copy:
+    src: consul.json
+    dest: /etc/consul.json
+- name: enable services
+  service: name="{{item}}" enabled=yes
+  with_items:
+    - wildfly
+    - httpd
+- name: put restore script for consul kv
+  copy:
+    src: restore-consul-kv.sh
+    dest: /usr/bin
+    mode: "0755"

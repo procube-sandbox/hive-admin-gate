@@ -1,0 +1,8 @@
+[Unit]
+Description = Monitor shibd.log then restart when memcached error caused by IP address of memcached changed at restart memcached
+Before = shibd.service
+[Service]
+ExecStart = /usr/bin/perl /bin/swatch -c /usr/lib/shibd-monitor/swatch_shibdlog_sh.conf -t /var/log/shibboleth/shibd.log
+Type = simple
+[Install]
+WantedBy = multi-user.target

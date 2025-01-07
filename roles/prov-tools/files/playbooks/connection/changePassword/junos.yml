@@ -1,0 +1,42 @@
+- name: check for user
+  junos_command:
+    commands:
+      - "show configuration system login user {{ cs_obj[loop_protocol ~ 'ID'] }}"
+  vars:
+    ansible_connection: netconf
+    ansible_network_os: junos
+    ansible_ssh_port: 22
+  register: result_check_user
+
+- name: create user
+  junos_user:
+    name: "{{ cs_obj[loop_protocol ~ 'ID'] }}"
+    encrypted_password: "{{ cs_obj[loop_protocol ~ 'Password'] | password_hash('sha512') }}"
+    role: super-user
+    state: present
+  vars:
+    ansible_connection: netconf
+    ansible_network_os: junos
+    ansible_ssh_port: 22
+  when: result_check_user.stdout[0] | length < 2
+
+- name: update user
+  junos_user:
+    name: "{{ cs_obj[loop_protocol ~ 'ID'] }}"
+    encrypted_password: "{{ cs_obj[loop_protocol ~ 'Password'] | password_hash('sha512') }}"
+    state: present
+  vars:
+    ansible_connection: netconf
+    ansible_network_os: junos
+    ansible_ssh_port: 22
+  when: result_check_user.stdout[0] | length > 2
+
+- name: remote login linux shell admin-exec
+  expect:
+    command: ssh -o StrictHostKeyChecking=no -l "{{ cs_obj[loop_protocol ~ 'ID'] }}" "{{ hostname }}"
+    responses:
+      ".*[Pp]assword:.*": "{{ cs_obj[loop_protocol ~ 'Password'] }}"
+    timeout: 10
+  changed_when: false
+  vars:
+    ansible_connection: local

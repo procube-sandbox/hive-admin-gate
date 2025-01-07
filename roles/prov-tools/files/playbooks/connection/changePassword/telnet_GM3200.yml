@@ -1,0 +1,14 @@
+- name: update connection
+  ansible.netcommon.telnet_aoi:
+    user: "{{ cs_obj[loop_protocol ~ 'ID'] }}"
+    password: "{{ cs_obj[loop_protocol ~ 'Password'] }}"
+    login_prompt:
+      - "login:"
+    password_prompt:
+      - "password:"
+    prompts:
+      - ">"
+    commands:
+      - "#telnet login admin-exec"
+    timeout: 10
+

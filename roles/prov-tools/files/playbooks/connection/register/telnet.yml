@@ -1,0 +1,120 @@
+---
+- delegate_to: localhost
+  block:
+  - name: Get token of REST API.
+    uri:
+      url: "http://guacamole:8080/guacamole/api/tokens"
+      headers:
+        Content-Type: "application/x-www-form-urlencoded"
+      method: POST
+      body: 'username={{ username }}&password={{ password }}'
+      validate_certs: false
+      return_content: yes
+      status_code: 200
+    register: token
+  
+  - name: Get Connections.
+    uri:
+      url: "http://guacamole:8080/guacamole/api/session/data/postgresql/connections"
+      headers:
+        Guacamole-Token: "{{ token.json.authToken }}"
+      method: GET
+      validate_certs: false
+      return_content: yes
+      status_code: 200
+    register: guacamole_connections
+  - name: Set fact to target connection id.
+    set_fact:
+      connectionidtelnet: "{{ item.key }}"
+    when: item.value.idmIdentifier == id and item.value.protocol == 'telnet'
+    loop: "{{ guacamole_connections.json | dict2items }}"
+    loop_control:
+      label: "{{ item.key }}"
+  
+  - name: Put connection.
+    uri:
+      url: "http://guacamole:8080/guacamole/api/session/data/postgresql/connections/{{ connectionidtelnet }}"
+      headers:
+        Guacamole-Token: "{{ token.json.authToken }}"
+        Content-Type: "application/json"
+      method: PUT
+      body_format: json
+      body:
+        name: "{{ hostname }}:{{ id }}-telnet"
+        parentIdentifier: ROOT
+        protocol: "telnet"
+        idmIdentifier: "{{ id }}"
+        parameters:
+          port: "{{ telnetConsolePort if telnetConsolePort is defined else cs_obj.telnetPort | default('') }}"
+          create-recording-path: "true"
+          recording-path: "${HISTORY_PATH}/${HISTORY_UUID}"
+          username: "{{ cs_obj.telnetID | default(None) }}"
+          password: "{{ cs_obj.telnetPassword | default(None) }}"
+          username-regex: "{{ '.*[Uu]sername.*' if cs_obj.osType == 'asa' or cs_obj.osType == 'ios' or cs_obj.osType == 'iosxr' or cs_obj.osType == 'telnet_iosxr' or cs_obj.osType == 'eos' or cs_obj.osType == 'telnet_ce6855' else '.*Login.*' if cs_obj.osType == 'junos' or cs_obj.osType == 'fortios' else '.*login.*' if cs_obj.osType == 'telnet_XGMC-2016' else omit }}"
+          password-regex: "{{ '.*[Pp]assword.*' if cs_obj.osType == 'asa' or cs_obj.osType == 'ios' or cs_obj.osType == 'iosxr' or cs_obj.osType == 'junos' or cs_obj.osType == 'fortios' or cs_obj.osType == 'eos' else '.*' if cs_obj.osType == 'telnet_XGMC-2016' else omit }}"
+          create-typescript-path: "true"
+          typescript-path: "${HISTORY_PATH}/${HISTORY_UUID}"
+          typescript-name: typescript
+          hostname: "{{ hostname }}"
+          swcZone: "{{ swcZone | join(',') | default('') }}"
+        attributes:
+          remark: "{{ remark | default('') }}"
+          max-connections: "0"
+          max-connections-per-user: "0"
+          weight: ""
+          failover-only: ""
+          guacd-port: ""
+          guacd-encryption: ""
+      validate_certs: false
+      status_code: 204
+    when: prov_operation != 'delete' and connectionidtelnet is defined
+  
+  - name: Post connection.
+    uri:
+      url: "http://guacamole:8080/guacamole/api/session/data/postgresql/connections"
+      headers:
+        Guacamole-Token: "{{ token.json.authToken }}"
+        Content-Type: "application/json"
+      method: POST
+      body_format: json
+      body:
+        name: "{{ hostname }}:{{ id }}-telnet"
+        parentIdentifier: ROOT
+        protocol: "telnet"
+        idmIdentifier: "{{ id }}"
+        parameters:
+          port: "{{ telnetConsolePort if telnetConsolePort is defined else cs_obj.telnetPort | default('') }}"
+          create-recording-path: "true"
+          recording-path: "${HISTORY_PATH}/${HISTORY_UUID}"
+          username: "{{ cs_obj.telnetID | default(None) }}"
+          password: "{{ cs_obj.telnetPassword | default(None) }}"
+          username-regex: "{{ '.*[Uu]sername.*' if cs_obj.osType == 'asa' or cs_obj.osType == 'ios' or cs_obj.osType == 'iosxr' or cs_obj.osType == 'telnet_iosxr' or cs_obj.osType == 'eos' or cs_obj.osType == 'telnet_ce6855' else '.*Login.*' if cs_obj.osType == 'junos' or cs_obj.osType == 'fortios' else '.*login.*' if cs_obj.osType == 'telnet_XGMC-2016' else omit }}"
+          password-regex: "{{ '.*[Pp]assword.*' if cs_obj.osType == 'asa' or cs_obj.osType == 'ios' or cs_obj.osType == 'iosxr' or cs_obj.osType == 'junos' or cs_obj.osType == 'fortios' or cs_obj.osType == 'eos' else '.*' if cs_obj.osType == 'telnet_XGMC-2016' else omit }}"
+          create-typescript-path: "true"
+          typescript-path: "${HISTORY_PATH}/${HISTORY_UUID}"
+          typescript-name: typescript
+          hostname: "{{ hostname }}"
+          swcZone: "{{ swcZone | join(',') | default('') }}"
+        attributes:
+          remark: "{{ remark | default('') }}"
+          max-connections: "0"
+          max-connections-per-user: "0"
+          weight: ""
+          failover-only: ""
+          guacd-port: ""
+          guacd-encryption: ""
+      validate_certs: false
+      return_content: yes
+      status_code: 200
+    when: connectionidtelnet is not defined
+    register: new_connection
+  
+  - name: Delete connection.
+    uri:
+      url: "http://guacamole:8080/guacamole/api/session/data/postgresql/connections/{{ connectionidtelnet }}"
+      headers:
+        Guacamole-Token: "{{ token.json.authToken }}"
+      method: DELETE
+      validate_certs: false
+      status_code: 204
+    when: prov_operation == 'delete' and connectionidtelnet is defined

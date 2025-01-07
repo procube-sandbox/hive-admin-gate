@@ -1,0 +1,35 @@
+---
+- name: Provisioning to user account.
+  hosts: enableUsers
+  gather_facts: false
+  serial: 1
+  vars:
+    ansible_connection: local
+    ansible_python_interpreter: /root/prov/bin/python
+    username: guacadmin
+    password: guacadmin
+
+  tasks:
+  - name: Get token of REST API.
+    uri:
+      url: "http://guacamole:8080/guacamole/api/tokens"
+      headers:
+        Content-Type: "application/x-www-form-urlencoded"
+      method: POST
+      body: 'username={{ username }}&password={{ password }}'
+      validate_certs: false
+      return_content: yes
+      status_code: 200
+    register: token
+  - name: Add system permission.
+    uri:
+      url: "http://guacamole:8080/guacamole/api/session/data/postgresql/users/{{ uid | regex_replace('@', '%40') }}/permissions"
+      headers:
+        Guacamole-Token: "{{ token.json.authToken }}"
+        Content-Type: "application/json"
+      method: PATCH
+      body_format: json
+      body: '[{"op": "add", "path": "/systemPermissions", "value": "ADMINISTER"}]'
+      validate_certs: false
+      status_code: 204
+    when: "prov_operation == 'delete'"

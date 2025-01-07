@@ -1,0 +1,45 @@
+---
+- name: download mongo database
+  idm_fact: 
+    interface: "{{ item.1.name }}"
+    filter: "{{ item.1.filter | default(omit) }}"
+  loop: "{{ restore_sequence_mongodb | subelements('interfaces') }}"
+  register: mongo_dataset
+  loop_control:
+    label: "{{item.0.name}} / {{ item.1.name }}"
+- include_tasks: idm2md.yml
+  loop: "{{ md_ifs }}"
+  loop_control:
+    loop_var: md_if
+- name: download iscoop database
+  mysql_table_facts:
+    db: iscoop
+    table: "{{ item.name }}"
+    html_fields: "{{ item.html_fields | default(omit) }}"
+    filter: "{{ item.filter  | default(omit) }}"
+  vars:
+    ansible_python_interpreter: /root/prov/bin/python
+  loop: "{{restore_sequence_mariadb}}"
+  register: mariadb_dataset
+- name: transform value to jinja2 expression
+  idmdownload_format:
+    mongodb_data: "{{ mongo_dataset.results }}"
+    mariadb_data: "{{ mariadb_dataset.results }}"
+    targets:
+    - regex: "\\{SSHA\\}[0-9a-zA-Z+/=]+"
+      expression: "db_password"
+    - value: "{{ db_password }}"
+      expression: "db_password"
+    - value: "{{ dn_suffix }}"
+      expression: "dn_suffix"
+    - value: "{{ domain }}"
+      expression: "domain"
+    - value: "{{ dn_suffix | regex_replace('^DC=([^,]*),.*$', '\\1') }}"
+      expression: "dn_suffix | regex_replace('^DC=([^,]*),.*$', '\\1')"
+  register: idm2_all_dataset
+- name: put records to yaml file
+  local_action:
+    module: copy
+    content: |
+      {{ idm2_all_dataset.result | to_nice_yaml() }}
+    dest: "{{role_path}}/../idm-init/vars/main.yml"

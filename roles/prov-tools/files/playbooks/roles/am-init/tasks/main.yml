@@ -1,0 +1,94 @@
+---
+- name: create application
+  shell: |
+    nsamctl create {{ tenantid  }} {{ amid }}.{{domain}}
+  register: create_result
+  args:
+    creates: /opt/wildfly/standalone/deployments/{{ tenantid  }}.war
+- name: wait a minute for {{ tenantid  }}.war deployed
+  pause:
+    seconds: 35
+  when: create_result is changed
+- name: set proto to http
+  shell: |
+    nsamctl proto {{ amid  }}.{{ domain }} http
+  when: create_result is changed
+- name: set JDBC Driver for global
+  shell: |
+    nsamctl config_ds devicemgmt
+  args:
+    creates: /opt/wildfly/modules/org/postgresql/main/module.xml
+# set_ds すると wildfly の cli を呼びますが、結果 /opt/wildfly/standalone/configuration/standalone.xml に書き込まれます。
+# <subsystem xmlns="urn:jboss:domain:datasources:5.0">
+#   <datasources>
+#     ...
+# TODO: 冪等性を XML モジュール https://docs.ansible.com/ansible/latest/collections/community/general/xml_module.html で確保
+- name: set JDBC Driver for tenant
+  shell: |
+    nsamctl set_ds {{ tenantid }} amdb
+# - name: put datasource configuration file
+#   template:
+#     src: nsam-tenant-ds.xml.j2
+#     dest: "/opt/wildfly/standalone/deployments/nsam-{{ tenantid }}-ds.xml"
+#     mode: 0644
+#     owner: wildfly
+#     group: wildfly
+# - name: put custom pages
+#   template:
+#     src: "{{ item.src }}"
+#     dest: "{{ item.dest }}"
+#     owner: wildfly
+#     group: wildfly
+#   with_items:
+#   - src: langmap.json
+#     dest: /opt/shibidpConf_{{ tenantid  }}/views/userFiles/
+#   - src: default-login.vm # パスワード認証のログインフォームです。ユーザIDとパスワードの入力欄、およびログインボタンが配置されています。
+#     dest: /opt/shibidpConf_{{ tenantid  }}/views/userFiles/
+#   - src: nsam.css # スタイルが定義された css ファイルです。スタイルのカスタマイズでは、このファイルを編集することも、新しい css を新規作成することもできます。
+#     dest: /opt/shibidpConf_{{ tenantid  }}/views/userFiles/
+#   - src: default-totp.vm # OTP 認証画面です。OTP 入力欄とログインボタンが配置されています。
+#     dest: /opt/shibidpConf_{{ tenantid  }}/views/userFiles/
+#   - src: default-totp-registering-selector.vm # OTP 認証方法をユーザに選択させるための画面ですが、TOTPしかサポートしていないのでスキップするように設定されています。
+#     dest: /opt/shibidpConf_{{ tenantid  }}/views/userFiles/
+#   - src: default-totp-register.vm # TOTP 認証（Google認証システムなどを利用した認証）の設定画面です。
+#     dest: /opt/shibidpConf_{{ tenantid  }}/views/userFiles/
+#   - src: default-totp-register-complete.vm # OTP 設定が完了した後に遷移する画面です。一定時間経過後、自動 submit するよう javascript が設定されています。
+#     dest: /opt/shibidpConf_{{ tenantid  }}/views/userFiles/
+#   - src: logout.vm # ログアウトが実行されたときの画面。「他のSPもログアウトします」ボタンが表示される。
+#     dest: /opt/shibidpConf_{{ tenantid  }}/views/
+#   - src: logout-propagate.vm # 「他のSPもログアウト」が押されたときに遷移する画面。下の　logout/propagate.vm　が include されている。
+#     dest: /opt/shibidpConf_{{ tenantid  }}/views/
+#   - src: propagate.vm # SPごとのSLO呼び出し、その結果を表示する。
+#     dest: /opt/shibidpConf_{{ tenantid  }}/views/logout/
+- name: get defined attributes
+  consul_kv:
+    key: "nsam/{{ tenantid }}/samlAttribute/"
+    recurse: yes
+  register: currentSamlAttributes
+- name: remove orphand attributes
+  consul_kv:
+    key: "nsam/{{ tenantid }}/{{ item }}"
+    state: absent
+  loop: "{{ (orphands | map('regex_replace', '^(.*)$', 'samlAttribute/\\1') | list) + (orphands | map('regex_replace', '^(.*)$', 'samlAttributeFilter/\\1Allow') | list) }}"
+  vars: 
+    orphands: "{{ currentSamlAttributes.data | map(attribute='Value') | map('from_json') | map(attribute='attributeDefinitionId') | difference(defaultSamlAttributes) | difference(saml_attrs | default([]) | map(attribute='attr_id')) }}"
+- name: get defined SP
+  consul_kv:
+    key: "nsam/{{ tenantid }}/metadataFile/"
+    recurse: yes
+  register: currentSamlSP
+- name: remove orphand SP
+  consul_kv:
+    key: "nsam/{{ tenantid }}/{{ item }}"
+    state: absent
+  loop: "{{ (orphands | map('regex_replace', '^(.*)$', 'metadataFile/\\1') | list) + (orphands | map('regex_replace', '^(.*)$', 'relyingPartyOverrides/\\1') | list) }}"
+  vars: 
+    orphands: "{{ currentSamlSP.data | map(attribute='Value') | map('from_json') | map(attribute='metadataFileId') | difference(defaultSamlSPs) | difference(saml_sps | default([]) | map(attribute='published_name')) }}"
+- name: load consul kv
+  consul_kv:
+    key: "{{ item.key }}"
+    value: "{{ item.value | to_json }}"
+  with_items: "{{ am_kv }}"
+  when: am_kv is defined
+# デプロイごとにメモリを消費するので、 Java VM OOMを避けるには metaspace が大きい必要がある
+# 日次で再起動などの対策が必要？

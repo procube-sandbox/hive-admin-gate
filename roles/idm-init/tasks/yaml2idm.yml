@@ -1,0 +1,13 @@
+- name: setup instances
+  idm:
+    interface: "{{ item.name }}"
+    key_property: "{{ item.key_property }}"
+    filter: "{{ item.filter | default(omit)}}"
+    instances: "{{ item.instances }}"
+  register: loaded_data
+  loop: "{{ phase.interfaces }}"
+  until: not loaded_data.failed
+  retries: 3
+  delay: 3
+  vars:
+    ansible_python_interpreter: /root/prov/bin/python

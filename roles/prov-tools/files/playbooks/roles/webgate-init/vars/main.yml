@@ -1,0 +1,70 @@
+saml_cert_stripped: "{{ saml_cert | replace('-----BEGIN CERTIFICATE-----\n','') | replace('-----END CERTIFICATE-----','') }}"
+
+webgate_kv_idps:
+  - key: "metadatas/{{ tenantid }}"
+    value:
+      metadata: |
+        <?xml version="1.0" encoding="UTF-8"?>
+        <EntityDescriptor xmlns="urn:oasis:names:tc:SAML:2.0:metadata"
+            xmlns:ds="http://www.w3.org/2000/09/xmldsig#" xmlns:shibmd="urn:mace:shibboleth:metadata:1.0"
+            xmlns:xml="http://www.w3.org/XML/1998/namespace"
+            xmlns:mdui="urn:oasis:names:tc:SAML:metadata:ui"
+            entityID="https://{{ amid }}.{{ domain }}/{{ tenantid }}/shibboleth">
+
+            <IDPSSODescriptor protocolSupportEnumeration="urn:oasis:names:tc:SAML:2.0:protocol urn:oasis:names:tc:SAML:1.1:protocol urn:mace:shibboleth:1.0">
+                <KeyDescriptor>
+                  <ds:KeyInfo>
+                  <ds:X509Data>
+                  <ds:X509Certificate>
+                  {{ saml_cert_stripped }}
+                  </ds:X509Certificate>
+                  </ds:X509Data>
+                  </ds:KeyInfo>
+                </KeyDescriptor>
+                <ArtifactResolutionService Binding="urn:oasis:names:tc:SAML:1.0:bindings:SOAP-binding"
+                    Location="https://{{ amid }}.{{ domain }}/{{ tenantid }}/profile/SAML1/SOAP/ArtifactResolution"
+                    index="1"/>
+                <ArtifactResolutionService Binding="urn:oasis:names:tc:SAML:2.0:bindings:SOAP"
+                    Location="https://{{ amid }}.{{ domain }}/{{ tenantid }}/profile/SAML2/SOAP/ArtifactResolution"
+                    index="2"/>
+                <SingleLogoutService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect" Location="https://{{ amid }}.{{ domain }}/{{ tenantid }}/profile/SAML2/Redirect/SLO"/>
+                <SingleLogoutService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST" Location="https://{{ amid }}.{{ domain }}/{{ tenantid }}/profile/SAML2/POST/SLO"/>
+                <NameIDFormat xmlns="urn:oasis:names:tc:SAML:2.0:metadata">urn:oasis:names:tc:SAML:2.0:nameid-format:transient</NameIDFormat>
+                <NameIDFormat xmlns="urn:oasis:names:tc:SAML:2.0:metadata">urn:oasis:names:tc:SAML:2.0:nameid-format:persistent</NameIDFormat>
+                <NameIDFormat xmlns="urn:oasis:names:tc:SAML:2.0:metadata">urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress</NameIDFormat>
+                <NameIDFormat xmlns="urn:oasis:names:tc:SAML:2.0:metadata">urn:oasis:names:tc:SAML:1.1:nameid-format:X509SubjectName</NameIDFormat>
+                <NameIDFormat xmlns="urn:oasis:names:tc:SAML:2.0:metadata">urn:oasis:names:tc:SAML:2.0:nameid-format:kerberos</NameIDFormat>
+                <NameIDFormat xmlns="urn:oasis:names:tc:SAML:2.0:metadata">urn:oasis:names:tc:SAML:1.1:nameid-format:WindowsDomainQualifiedName</NameIDFormat>
+                <NameIDFormat xmlns="urn:oasis:names:tc:SAML:2.0:metadata">urn:oasis:names:tc:SAML:1.1:nameid-format:unspecified</NameIDFormat>
+
+                <SingleSignOnService Binding="urn:mace:shibboleth:1.0:profiles:AuthnRequest"
+                    Location="https://{{ amid }}.{{ domain }}/{{ tenantid }}/profile/Shibboleth/SSO"/>
+                <SingleSignOnService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST"
+                    Location="https://{{ amid }}.{{ domain }}/{{ tenantid }}/profile/SAML2/POST/SSO"/>
+                <SingleSignOnService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST-SimpleSign"
+                    Location="https://{{ amid }}.{{ domain }}/{{ tenantid }}/profile/SAML2/POST-SimpleSign/SSO"/>
+                <SingleSignOnService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect"
+                    Location="https://{{ amid }}.{{ domain }}/{{ tenantid }}/profile/SAML2/Redirect/SSO"/>
+            </IDPSSODescriptor>
+
+            <AttributeAuthorityDescriptor protocolSupportEnumeration="urn:oasis:names:tc:SAML:2.0:protocol urn:oasis:names:tc:SAML:1.1:protocol">
+                <Extensions>
+                    <shibmd:Scope regexp="false">{{ amid }}.{{ domain }}</shibmd:Scope>
+                </Extensions>
+                <KeyDescriptor>
+                  <ds:KeyInfo>
+                  <ds:X509Data>
+                  <ds:X509Certificate>
+                  {{ saml_cert_stripped }}
+                  </ds:X509Certificate>
+                  </ds:X509Data>
+                  </ds:KeyInfo>
+                </KeyDescriptor>
+                <AttributeService Binding="urn:oasis:names:tc:SAML:1.0:bindings:SOAP-binding"
+                    Location="https://{{ amid }}.{{ domain }}/{{ tenantid }}/profile/SAML1/SOAP/AttributeQuery"/>
+                <AttributeService Binding="urn:oasis:names:tc:SAML:2.0:bindings:SOAP"
+                    Location="https://{{ amid }}.{{ domain }}/{{ tenantid }}/profile/SAML2/SOAP/AttributeQuery"/>
+            </AttributeAuthorityDescriptor>
+        </EntityDescriptor>
+      name: "{{ tenantid }}"
+

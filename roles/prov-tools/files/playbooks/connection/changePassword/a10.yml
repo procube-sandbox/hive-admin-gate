@@ -1,0 +1,49 @@
+- name: check user
+  no_log: true
+  a10.acos_axapi.a10_admin:
+    ansible_host: "{{ hostname }}"
+    ansible_username: "{{ cs_obj.ansibleID }}"
+    ansible_password: "{{ cs_obj.ansiblePassword }}"
+    ansible_port: 443
+    state: noop
+    user: ""
+    get_type: list
+  vars:
+    ansible_connection: local
+  register: result
+
+- name: create user
+  a10.acos_axapi.a10_admin:
+    ansible_host: "{{ hostname }}"
+    ansible_username: "{{ cs_obj.ansibleID }}"
+    ansible_password: "{{ cs_obj.ansiblePassword }}"
+    ansible_port: 443
+    user: "{{ cs_obj[loop_protocol ~ 'ID'] }}"
+    privilege_global: write
+  vars:
+    ansible_connection: local
+    tmp_seach_str: "/axapi/v3/admin/{{ cs_obj[loop_protocol ~ 'ID'] }}/password"
+    when: result is not search(tmp_seach_str)
+
+- name: change password
+  a10.acos_axapi.a10_admin_password:
+    ansible_host: "{{ hostname }}"
+    ansible_username: "{{ cs_obj.ansibleID }}"
+    ansible_password: "{{ cs_obj.ansiblePassword }}"
+    ansible_port: 443
+    state: present
+    admin_user: "{{ cs_obj[loop_protocol ~ 'ID'] }}"
+    password_in_module: "{{ cs_obj[loop_protocol ~ 'Password'] }}"
+  vars:
+    ansible_connection: local
+
+- name: write memory
+  a10.acos_axapi.a10_write_memory:
+    ansible_host: "{{ hostname }}"
+    ansible_username: "{{ cs_obj.ansibleID }}"
+    ansible_password: "{{ cs_obj.ansiblePassword }}"
+    ansible_port: 443
+    state: present
+    partition: all
+  vars:
+    ansible_connection: local

@@ -1,0 +1,3 @@
+---
+webgate_join: "{{ groups['hives'] | intersect(groups[hive_stage]) | difference([inventory_hostname]) | map('extract', hostvars, 'hive_private_ip') | list }}"
+webgate_delimiter: "','"

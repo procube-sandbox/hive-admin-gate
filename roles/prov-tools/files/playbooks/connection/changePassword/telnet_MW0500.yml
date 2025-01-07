@@ -1,0 +1,70 @@
+- name: check user
+  ansible.netcommon.telnet_aoi:
+    username: "{{ cs_obj.ansibleID }}"
+    password: "{{ cs_obj.ansiblePassword }}"
+    login_prompt:
+      - "login:"
+    password_prompt:
+      - "password:"
+    prompts:
+      - "#"
+    command:
+      - terminal length 255
+      - show config
+    timeout: 10
+  register: command_output
+
+- name: Extract lines containing a specific string
+  set_fact:
+    result_check_user: "{{ command_output.stdout_lines | select('match', search_string) }}"
+  vars:
+    search_string: "username {{ cs_obj[loop_protocol ~ 'ID']}}*priv*"
+
+- name: update user admin
+  ansible.netcommon.telnet_aoi:
+    username: "{{ cs_obj.ansibleID }}"
+    password: "{{ cs_obj.ansiblePassword }}"
+    login_prompt:
+      - "login:"
+    password_prompt:
+      - "password:"
+    prompts:
+      - "#"
+    command:
+      - configure
+      - "username {{ cs_obj[loop_protocol ~ 'ID'] }} {{ cs_obj[loop_protocol ~ 'Password'] }} priv"
+      - exit
+    timeout: 10
+  when: result_check_user | length == 0
+
+- name: update user 
+  ansible.netcommon.telnet_aoi:
+    username: "{{ cs_obj.ansibleID }}"
+    password: "{{ cs_obj.ansiblePassword }}"
+    login_prompt:
+      - "login:"
+    password_prompt:
+      - "password:"
+    prompts:
+      - "#"
+    command:
+      - configure
+      - "username {{ cs_obj[loop_protocol ~ 'ID'] }} {{ cs_obj[loop_protocol ~ 'Password'] }}" 
+      - exit
+    timeout: 10
+  when: result_check_user | length > 0
+
+- name: update connection
+  ansible.netcommon.telnet_aoi:
+    user: "{{ cs_obj[loop_protocol ~ 'ID'] }}"
+    password: "{{ cs_obj[loop_protocol ~ 'Password'] }}"
+    login_prompt:
+      - "login:"
+    password_prompt:
+      - "password:"
+    prompts:
+      - "#"
+    commands:
+      - "#telnet login admin-exec"
+    timeout: 10
+

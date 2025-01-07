@@ -1,0 +1,37 @@
+---
+- name: create /usr/lib/shibd-monitor/ directory
+  file: 
+    dest: "/usr/lib/shibd-monitor/"
+    state: directory
+    owner: root
+    group: root
+    mode: 0755
+- name: put swatch
+  copy:
+    src: "swatch-3.2.3-28.el8.1.noarch.rpm"
+    dest: "/usr/lib/shibd-monitor/swatch-3.2.3-28.el8.1.noarch.rpm"
+    mode: "644"
+- name: install swatch
+  yum: 
+    state: present
+    name: 
+      - /usr/lib/shibd-monitor/swatch-3.2.3-28.el8.1.noarch.rpm
+      - perl-libs
+    disable_gpg_check: yes
+- name: put swatch files
+  copy:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    mode: "{{ item.mode }}"
+  with_items:
+    - src: swatch_shibdlog_sh.conf
+      dest: /usr/lib/shibd-monitor/swatch_shibdlog_sh.conf
+      mode: "644"
+    - src: shibd-swatch.service
+      dest: /usr/lib/systemd/system/shibd-swatch.service
+      mode: "644"
+- name: enable shibd-swatch.service
+  service: 
+    name: shibd-swatch.service
+    enabled: yes
+

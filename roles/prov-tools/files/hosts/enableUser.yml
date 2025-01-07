@@ -1,0 +1,7 @@
+---
+plugin: idm_inventory
+interface: disabledUserIF
+host_name_property: uid
+class_name: disabledUser
+groups:
+- name: enableUsers

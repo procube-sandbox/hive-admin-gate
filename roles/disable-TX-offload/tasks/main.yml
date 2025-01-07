@@ -1,0 +1,4 @@
+---
+- name: disable TX offload
+  shell:
+    cmd: sudo nmcli con modify "{{ hive_interface_name }}" ethtool.feature-tx off

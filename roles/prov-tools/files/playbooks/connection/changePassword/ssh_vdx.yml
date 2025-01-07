@@ -1,0 +1,42 @@
+- name: check user
+  nos_command:
+    commands:
+      - show running-config | inc username
+  register: command_output
+  vars:
+    ansible_connection: network_cli
+    ansible_network_os: nos
+
+- name: Extract lines containing a specific string
+  set_fact:
+    result_check_user: "{{ command_output.stdout_lines | select('search', search_string) }}"
+  vars:
+    search_string: ".*{{ cs_obj[loop_protocol ~ 'ID']}}.*"
+
+- name: create user
+  nos_config:
+    lines: 
+      - username "{{ cs_obj[loop_protocol ~ 'ID'] }}" password "{{ cs_obj[loop_protocol ~ 'Password'] }}" role admin
+  vars:
+    ansible_connection: network_cli
+    ansible_network_os: nos
+  when: result_check_user | length == 0
+
+- name: update user
+  nos_config:
+    lines:
+      - username "{{ cs_obj[loop_protocol ~ 'ID'] }}" password "{{ cs_obj[loop_protocol ~ 'Password'] }}" encryption-level 0
+  vars:
+    ansible_connection: network_cli
+    ansible_network_os: nos
+  when: result_check_user | length > 0
+
+- name: remote login linux shell admin-exec
+  expect:
+    command: ssh -o StrictHostKeyChecking=no -l "{{ cs_obj[loop_protocol ~ 'ID'] }}" "{{ hostname }}"
+    responses:
+      ".*[Pp]assword:.*": "{{ cs_obj[loop_protocol ~ 'Password'] }}"
+    timeout: 10
+  changed_when: false
+  vars:
+    ansible_connection: local

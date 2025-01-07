@@ -1,0 +1,36 @@
+---
+- hosts: all
+  gather_facts: no
+  connection: local
+  vars_files:
+  - /var/acme/acme-vars.yml
+  vars:
+    ansible_python_interpreter: /root/consul/bin/python
+    # ansible_python_interpreter: /bin/python3
+    FQDN: "{{ inventory_hostname }}"
+  tasks:
+  - name: Generate private key
+    openssl_privatekey:
+      path: /var/acme/data/{{ inventory_hostname }}_server.key
+      size: 4096
+
+  - name: Generate self-signed certificate
+    openssl_certificate:
+      provider: selfsigned
+      path: /var/acme/data/{{ inventory_hostname }}-fullchain.crt
+      privatekey_path: /var/acme/data/{{ inventory_hostname }}_server.key
+
+  - name: setup certificate json
+    set_fact:
+      certificate_json:
+        fqdn: "{{ inventory_hostname }}"
+        # this is intentional spelling miss to match WG2
+        cerificate: "{{ lookup('file', '/var/acme/data/' + inventory_hostname + '-fullchain.crt') }}"
+        # cerificate: "{{ lookup('file', '/var/acme/data/' + inventory_hostname) }}"
+        privateKey: "{{ lookup('file', '/var/acme/data/' + inventory_hostname + '_server.key') }}"
+  - name: inject certificate into consul
+    consul_kv:
+      key: "certificates/{{ inventory_hostname }}"
+      value: "{{ certificate_json | to_json }}"
+    # when: letsencrypt_challenge is changed
+

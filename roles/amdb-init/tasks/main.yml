@@ -1,0 +1,13 @@
+---
+- name: copy db create SQL file
+  copy:
+    src: createLoginRecordingTable.psql.sql
+    dest: /root/createLoginRecordingTable.psql.sql
+  register: copy_sql
+- name: create nsam_idp DB
+  shell: |
+    psql -U nsamadmin -f /root/createLoginRecordingTable.psql.sql
+  when: copy_sql is changed
+
+
+

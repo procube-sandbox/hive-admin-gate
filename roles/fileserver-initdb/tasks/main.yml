@@ -1,0 +1,5 @@
+---
+- name: put init.js
+  copy:
+    src: init.js
+    dest: /docker-entrypoint-initdb.d/

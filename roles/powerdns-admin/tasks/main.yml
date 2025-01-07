@@ -1,0 +1,14 @@
+- name: install create admin script
+  copy: src=create_admin.py dest=/app/ mode=0775
+- name: build initial database
+  shell: |
+    export SQLALCHEMY_DATABASE_URI=sqlite:////app/data/padmin.sqlite
+    set -xe
+    cd /app
+    mkdir data
+    entrypoint.sh flask db upgrade
+    entrypoint.sh ./create_admin.py "{{hostvars['pdnsadmin'].db_password}}"
+    chown pda:pda -R data
+  register: shell_log
+  args:
+    creates: /app/data/padmin.sqlite

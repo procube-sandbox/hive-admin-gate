@@ -1,0 +1,46 @@
+- name: check user
+  raw: |
+    show local-user | include "Device management user"
+  register: command_output
+
+- name: Extract lines containing a specific string
+  set_fact:
+    result_check_user: "{{ command_output.stdout_lines | select('search', search_string) }}"
+  vars:
+    search_string: "Device management user {{ cs_obj[loop_protocol ~ 'ID']}}"
+
+- name: create user
+  raw: |
+    system-view
+    local-user {{ cs_obj[loop_protocol ~ 'ID'] }} class manage
+    password simple {{ cs_obj[loop_protocol ~ 'Password'] }}
+    service-type ssh telnet
+    authorization-attribute user-role network-admin
+    no authorization-attribute user-role network-operator
+    exit
+  when: result_check_user | length == 0
+
+- name: update password
+  raw: |
+    system-view
+    local-user {{ cs_obj[loop_protocol ~ 'ID'] }}
+    password simple {{ cs_obj[loop_protocol ~ 'Password'] }}
+    exit
+  when: result_check_user | length > 0
+
+- name: remote login linux shell admin-exec
+  expect:
+    command: ssh -o StrictHostKeyChecking=no -l "{{ cs_obj[loop_protocol ~ 'ID'] }}" "{{ hostname }}"
+    responses:
+      ".*[Pp]assword:.*": "{{ cs_obj[loop_protocol ~ 'Password'] }}"
+    timeout: 10
+  changed_when: false
+  vars:
+    ansible_connection: local
+
+- name: config save
+  raw: |
+    system-view
+    write
+    exit
+

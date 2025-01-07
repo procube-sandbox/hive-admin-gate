@@ -1,0 +1,168 @@
+---
+- delegate_to: localhost
+  block:
+  - name: Get token of REST API.
+    uri:
+      url: "http://guacamole:8080/guacamole/api/tokens"
+      headers:
+        Content-Type: "application/x-www-form-urlencoded"
+      method: POST
+      body: 'username={{ username }}&password={{ password }}'
+      validate_certs: false
+      return_content: yes
+      status_code: 200
+    register: token
+  
+  - name: Get Users.
+    uri:
+      url: "http://guacamole:8080/guacamole/api/session/data/postgresql/users"
+      headers:
+        Guacamole-Token: "{{ token.json.authToken }}"
+      method: GET
+      validate_certs: false
+      return_content: yes
+      status_code: 200
+    register: guacamole_users
+  
+  - name: Get Connections.
+    uri:
+      url: "http://guacamole:8080/guacamole/api/session/data/postgresql/connections"
+      headers:
+        Guacamole-Token: "{{ token.json.authToken }}"
+      method: GET
+      validate_certs: false
+      return_content: yes
+      status_code: 200
+    register: guacamole_connections
+  - name: Set fact to target connection id.
+    set_fact:
+      connectionidvnc: "{{ item.key }}"
+    when: item.value.idmIdentifier == id and item.value.protocol == 'vnc'
+    loop: "{{ guacamole_connections.json | dict2items }}"
+    loop_control:
+      label: "{{ item.key }}"
+  
+  - name: Put connection.
+    uri:
+      url: "http://guacamole:8080/guacamole/api/session/data/postgresql/connections/{{ connectionidvnc }}"
+      headers:
+        Guacamole-Token: "{{ token.json.authToken }}"
+        Content-Type: "application/json"
+      method: PUT
+      body_format: json
+      body:
+        name: "{{ hostname }}:{{ id }}-vnc"
+        parentIdentifier: ROOT
+        protocol: "vnc"
+        idmIdentifier: "{{ id }}"
+        parameters:
+          port: "{{ cs_obj.vncPort | default('') }}"
+          create-recording-path: "true"
+          recording-path: "${HISTORY_PATH}/${HISTORY_UUID}"
+          username: "{{ cs_obj.vncID }}"
+          password: "{{ cs_obj.vncPassword }}"
+          hostname: "{{ hostname }}"
+          swcZone: "{{ swcZone | join(',') | default('') }}"
+          httpLoginFormat: "{{ httpVars | to_json }}"
+        attributes:
+          remark: "{{ remark | default('') }}"
+          max-connections: "0"
+          max-connections-per-user: "0"
+          weight: ""
+          failover-only: ""
+          guacd-port: ""
+          guacd-encryption: ""
+      validate_certs: false
+      status_code: 204
+    when: prov_operation != 'delete' and connectionidvnc is defined
+    vars:
+      httpVars: "{\"target\":\"proliant\",\"protocol\":\"{{ cs_obj.httpProtocol }}\",\"fqdn\":\"{{ hostname ~ (':' ~ cs_obj.vncPort) | default('')}}\",\"path\":\"\",\"params\":[[{\"event\":\"input\",\"getElementMethod\":\"xpath\",\"targetElementPath\":\"//input[@id='username']\",\"sendValue\":\"{{ cs_obj.vncID }}\"},{\"event\":\"input\",\"getElementMethod\":\"xpath\",\"targetElementPath\":\"//input[@id='password']\",\"sendValue\":\"{{ cs_obj.vncPassword }}\"},{\"event\":\"submit\",\"getElementMethod\":\"xpath\",\"targetElementPath\":\"//button[@id='login-form__submit']\",\"sendValue\":\"\"}]]}"
+  
+  - name: Post connection.
+    uri:
+      url: "http://guacamole:8080/guacamole/api/session/data/postgresql/connections"
+      headers:
+        Guacamole-Token: "{{ token.json.authToken }}"
+        Content-Type: "application/json"
+      method: POST
+      body_format: json
+      body:
+        name: "{{ hostname }}:{{ id }}-vnc"
+        parentIdentifier: ROOT
+        protocol: "vnc"
+        idmIdentifier: "{{ id }}"
+        parameters:
+          port: "{{ cs_obj.vncPort | default('') }}"
+          create-recording-path: "true"
+          recording-path: "${HISTORY_PATH}/${HISTORY_UUID}"
+          username: "{{ cs_obj.vncID }}"
+          password: "{{ cs_obj.vncPassword }}"
+          hostname: "{{ hostname }}"
+          swcZone: "{{ swcZone | join(',') | default('') }}"
+          httpLoginFormat: "{{ httpVars | to_json }}"
+        attributes:
+          remark: "{{ remark | default('') }}"
+          max-connections: "0"
+          max-connections-per-user: "0"
+          weight: ""
+          failover-only: ""
+          guacd-port: ""
+          guacd-encryption: ""
+      validate_certs: false
+      return_content: yes
+      status_code: 200
+    when: connectionidvnc is not defined
+    vars:
+      httpVars: >-
+        {
+        \"target\":\"proliant\",
+        \"protocol\":\"{{ cs_obj.httpProtocol }}\",
+        \"fqdn\":\"{{ hostname ~ (':' ~ cs_obj.vncPort) | default('')}}\",
+        \"path\":\"\",
+        \"params\":
+        [[{
+        \"event\":\"iframe\",
+        \"getElementMethod\":\"xpath\",
+        \"targetElementPath\":\"//iframe[@id='frame_name']\",
+        \"sendValue\":\"\"
+        },{
+        \"event\":\"input\",
+        \"getElementMethod\":\"xpath\",
+        \"targetElementPath\":\"//input[@id='username']\",
+        \"sendValue\":\"{{ cs_obj.vncID }}\"
+        },{
+        \"event\":\"input\",
+        \"getElementMethod\":\"xpath\",
+        \"targetElementPath\":\"//input[@id='password']\",
+        \"sendValue\":\"{{ cs_obj.vncPassword }}\"
+        },{
+        \"event\":\"submit\",
+        \"getElementMethod\":\"xpath\",
+        \"targetElementPath\":\"//button[@id='login-form__submit']\",
+        \"sendValue\":\"\"
+        }]]}
+    register: new_connection
+  
+  - name: Delete connection.
+    uri:
+      url: "http://guacamole:8080/guacamole/api/session/data/postgresql/connections/{{ connectionidvnc }}"
+      headers:
+        Guacamole-Token: "{{ token.json.authToken }}"
+      method: DELETE
+      validate_certs: false
+      status_code: 204
+    when: prov_operation == 'delete' and connectionidvnc is defined
+  
+  - name: Register connection permission.
+    uri:
+      url: "http://guacamole:8080/guacamole/api/session/data/postgresql/users/{{ item | regex_replace('@', '%40') }}/permissions"
+      headers:
+        Guacamole-Token: "{{ token.json.authToken }}"
+        Content-Type: "application/json"
+      method: PATCH
+      body_format: json
+      body: "{{ [{'op': 'add', 'path': '/connectionPermissions/' ~ new_connection.json.identifier, 'value': 'READ'}] }}"
+      validate_certs: false
+      status_code: 204
+    loop: "{{ guacamole_users.json.keys() }}"
+    when: connectionidvnc is not defined and new_connection.json is defined

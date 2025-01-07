@@ -1,0 +1,216 @@
+##
+## Velocity Template for DisplayUsernamePasswordPage view-state
+##
+## Velocity context will contain the following properties
+## flowExecutionUrl - the form action location
+## flowRequestContext - the Spring Web Flow RequestContext
+## flowExecutionKey - the SWF execution key (this is built into the flowExecutionUrl)
+## profileRequestContext - root of context tree
+## authenticationContext - context with authentication request information
+## authenticationErrorContext - context with login error state
+## authenticationWarningContext - context with login warning state
+## ldapResponseContext - context with LDAP state (if using native LDAP)
+## rpUIContext - the context with SP UI information from the metadata
+## extendedAuthenticationFlows - collection of "extended" AuthenticationFlowDescriptor objects
+## passwordPrincipals - contents of the shibboleth.authn.Password.PrincipalOverride bean
+## encoder - HTMLEncoder class
+## request - HttpServletRequest
+## response - HttpServletResponse
+## environment - Spring Environment object for property resolution
+## custom - arbitrary object injected by deployer
+##
+#set ($rpContext = $profileRequestContext.getSubcontext('net.shibboleth.idp.profile.context.RelyingPartyContext'))
+#set ($username = $authenticationContext.getSubcontext('net.shibboleth.idp.authn.context.UsernamePasswordContext', true).getUsername())
+#set ($passwordEnabled = false)
+#if (!$passwordPrincipals or $passwordPrincipals.isEmpty() or $authenticationContext.isAcceptable($passwordPrincipals))
+  #set ($passwordEnabled = true)
+#end
+#set ($diff = $request.getSession().getMaxInactiveInterval())
+##
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>#springMessageText("idp.title", "NetSoarer AccessManager - Login Page")</title>
+
+    <link href="/ns_webbox/bootstrap/css/bootstrap.min.css" rel="stylesheet"></link>
+    <link href="/ns_webbox/fontawesome/css/all.css" rel="stylesheet"></link>
+    <link href="/idp_userFiles/nsam.css?v=138_2_ge63d524" rel="stylesheet"></link>
+
+    <script src="/ns_webbox/jquery.min.js"></script>
+    <script src="/ns_webbox/bootstrap/js/bootstrap.bundle.js"></script>
+    <script src="/ns_webbox/langChange.js"></script>
+    <script src="/idp_userFiles/langmap.json?v=138_2_ge63d524"></script>
+
+    <script>
+    function closeAlert() {
+      $('#loginPrecheckPageErrorMessage').hide();
+      $('#loginPageErrorMessage').hide();
+      $('#loginPrecheckInvalidCharPageErrorMessage').hide();
+    }
+    function checkUndesirableChars(val) {
+      if (val.match(/[^\x01-\x7E\xA1-\xDF]+/)) {
+        return true;
+      } else {
+        return false;
+      }
+    }
+    var doCheckSubmit = true;
+    function checkSubmitDisabled() {
+       doCheckSubmit = false;
+    }
+    function checkSubmit() {
+      if (!doCheckSubmit) return true;
+      closeAlert();
+      if (loginForm.j_username.value == '' ||
+          loginForm.j_password.value == '') {
+        $('#loginPrecheckPageErrorMessage').addClass("alert");
+        $('#loginPrecheckPageErrorMessage').addClass("alert-warning");
+        $("#loginPrecheckPageErrorMessage").css('display', 'block');
+        $("#loginPageErrorMessage").hide();
+        return false;
+      }
+      if (checkUndesirableChars(loginForm.j_username.value) || checkUndesirableChars(loginForm.j_password.value)) {
+        $('#loginPrecheckInvalidCharPageErrorMessage').addClass("alert");
+        $('#loginPrecheckInvalidCharPageErrorMessage').addClass("alert-warning");
+        $("#loginPrecheckInvalidCharPageErrorMessage").css('display', 'block');
+        $("#loginPageErrorMessage").hide();
+        return false;
+      }
+
+      $('#login-username').attr('readonly', true);
+      $('#login-password').attr('readonly', true);
+      var loginBtn = $('#btn-login');
+      var regBtnLoading = $('#btn-login-loading');
+      loginBtn.hide();
+      regBtnLoading.show();
+      return true;
+    }
+
+    function setFocus() {
+#if($username)
+      document.loginForm.j_password.focus();
+#else
+      document.loginForm.j_username.focus();
+#end
+    }
+
+
+$(document).ready(function () {
+
+var timeoutmillis = $diff * 1000;
+window.setTimeout(function() {
+  $('#inactivity-alert').fadeIn('slow');
+}, timeoutmillis - 60000);
+
+window.setTimeout(function() {
+  var divTag = $('#inactivity-error-mask');
+  divTag.css("z-index", "999")
+        .css("position", "absolute")
+        .css("top", "0px")
+        .css("left", "0px")
+        .css("right", "0px")
+        .css("bottom", "0px")
+        .css("background-color", "gray")
+        .css("opacity", "0.8");
+  $('#inactivity-alert').hide();
+  divTag.show();
+},timeoutmillis);
+
+});
+
+    </script>
+  </head>
+
+  <body onload="initLang(); setFocus();">
+  <div class="alert alert-warning" id="inactivity-alert" style="display:none; margin-bottom: 2px;">
+    <button type="button" class="close" data-dismiss="alert">x</button>
+    <span id="login-inactivity-warning"></span>
+  </div>
+
+  <div id="inactivity-error-mask" style="display:none;">
+    <div class="alert alert-danger" id="inactivity-error">
+      <span id="login-inactivity-error"></span>
+    </div>
+  </div>
+
+  <div id="login">
+    <h3 class="text-center text-white pt-5">NetSoarer Access Manager</h3>
+
+    <div id="loginPrecheckPageErrorMessage" style="display:none">
+      <span id="loginid-password-empty"></span>
+      <button type="button" class="close" onClick="closeAlert()">&#215;</button>
+    </div>
+    <div id="loginPrecheckInvalidCharPageErrorMessage" style="display:none">
+      <span id="loginid-password-invalid-char"></span>
+      <button type="button" class="close" onClick="closeAlert()">&times;</button>
+    </div>
+
+    #parse("userFiles/default-login-error.vm")
+
+    <div class="container">
+      <div id="login-row" class="row justify-content-center align-items-center">
+        <div id="login-column" class="col-md-6">
+          <div id="login-box" class="col-md-12">
+            <form id="loginForm" class="form" method="post" name="loginForm" role="form" action="${flowExecutionUrl}" onSubmit="return checkSubmit();">
+              <h3 class="text-center text-info mb-3">Login</h3>
+              <div class="input-group mb-3">
+                <div class="input-group-prepend">
+                  <span class="input-group-text"><i class="fas fa-user"></i></span>
+                </div>
+                <input id="login-username" type="text" class="form-control" name="j_username" value="#if($username)$username#end" placeholder="" />
+              </div>
+              <div class="input-group mb-3">
+                <div class="input-group-prepend">
+                  <span class="input-group-text"><i class="fas fa-key"></i></span>
+                </div>
+                <input id="login-password" type="password" class="form-control" name="j_password" placeholder="" />
+              </div>
+              <div class="form-group">
+                <input id="btn-login" class="btn btn-info btn-md btn-block" type="submit" name="_eventId_proceed" tabindex="3"/>
+              </div>
+              <button id="btn-login-loading" class="btn btn-info btn-md btn-block" style="display:none;" disabled>
+                <span class="spinner-border spinner-border-sm"></span>
+              </button>
+              <div class="form-element-wrapper" style="display: none;">
+                <input id="_shib_idp_revokeConsent" type="checkbox" name="_shib_idp_revokeConsent" value="true" />
+              </div>
+
+            #foreach ($extFlow in $extendedAuthenticationFlows)
+              #if ($authenticationContext.isAcceptable($extFlow) and $extFlow.test(profileRequestContext))
+                <div class="form-group">
+                  <button class="btn btn-outline-primary rounded-pill btn-md btn-block" type="submit" name="_eventId_$extFlow.getId()" onclick="checkSubmitDisabled()">
+                    #springMessageText("idp.login.$extFlow.getId().replace('authn/','')", $extFlow.getId().replace('authn/',''))
+                  </button>
+                </div>
+              #end
+            #end
+
+            </form>
+
+            <div class="dropdown">
+              <button class="btn btn-sm btn-outline-info dropdown-toggle" type="button" id="dropdownMenuButton" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                <span id="lang_title">lang</span>
+              </button>
+              <div class="dropdown-menu" aria-labelledby="dropdownMenuButton">
+                <a class="dropdown-item" href="#" onClick="changeLanguage('ja'); return false;" id="lang_jp"></a>
+                <a class="dropdown-item" href="#" onClick="changeLanguage('en'); return false;" id="lang_en"></a>
+              </div>
+            </div>
+
+            <div class="forgetPassword">
+                <a href="https://idm.admin-gate.procube-demo.jp/changePassword/initializePassword">パスワードを忘れた場合</a>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  </body>
+</html>

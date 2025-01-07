@@ -1,0 +1,24 @@
+{% for staff in (groups['m-filter_admin'] | map('extract', hostvars)) %}
+{% if ('organization' in staff and staff.organization != "999998" and staff.organization != "999996" and 'organizationName' in staff and 'userPosition' in staff and (staff.userPosition == "10" or staff.userPosition == "11" or staff.userPosition == "12"))
+   or ('subOrganization1' in staff and staff.subOrganization1 != "999998" and staff.subOrganization1 != "999996" and 'subOrganizationName1' in staff and 'subUserPosition1' in staff and (staff.subUserPosition1 == "10" or staff.subUserPosition1 == "11" or staff.subUserPosition1 == "12"))
+   or ('subOrganization2' in staff and staff.subOrganization2 != "999998" and staff.subOrganization2 != "999996" and 'subOrganizationName2' in staff and 'subUserPosition2' in staff and (staff.subUserPosition2 == "10" or staff.subUserPosition2 == "11" or staff.subUserPosition2 == "12"))
+   or ('subOrganization3' in staff and staff.subOrganization3 != "999998" and staff.subOrganization3 != "999996" and 'subOrganizationName3' in staff and 'subUserPosition3' in staff and (staff.subUserPosition3 == "10" or staff.subUserPosition3 == "11" or staff.subUserPosition3 == "12"))
+   or ('subOrganization4' in staff and staff.subOrganization4 != "999998" and staff.subOrganization4 != "999996" and 'subOrganizationName4' in staff and 'subUserPosition4' in staff and (staff.subUserPosition4 == "10" or staff.subUserPosition4 == "11" or staff.subUserPosition4 == "12"))
+   or ('subOrganization5' in staff and staff.subOrganization5 != "999998" and staff.subOrganization5 != "999996" and 'subOrganizationName5' in staff and 'subUserPosition5' in staff and (staff.subUserPosition5 == "10" or staff.subUserPosition5 == "11" or staff.subUserPosition5 == "12"))
+%}
+{{ 'mail==' + staff.userPrincipalName | default('') }},,,2,{{ staff.smallUid | default('') }},0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,127.0.0.1,{% 
+if ('organization' in staff and staff.organization != "999998" and staff.organization != "999996" and 'organizationName' in staff and 'userPosition' in staff and (staff.userPosition == "10" or staff.userPosition == "11" or staff.userPosition == "12"))
+%}{{ staff.organizationName | default('') }} {% endif %}{% 
+if 'subOrganization1' in staff and staff.subOrganization1 != "999998" and staff.subOrganization1 != "999996" and 'subOrganizationName1' in staff and 'subUserPosition1' in staff and (staff.subUserPosition1 == "10" or staff.subUserPosition1 == "11" or staff.subUserPosition1 == "12")
+%}{{ staff.subOrganizationName1 | default('') }} {% endif %}{%
+if 'subOrganization2' in staff and staff.subOrganization2 != "999998" and staff.subOrganization2 != "999996" and 'subOrganizationName2' in staff and 'subUserPosition2' in staff and (staff.subUserPosition2 == "10" or staff.subUserPosition2 == "11" or staff.subUserPosition2 == "12")
+%}{{ staff.subOrganizationName2 | default('') }} {% endif %}{%
+if 'subOrganization3' in staff and staff.subOrganization3 != "999998" and staff.subOrganization3 != "999996" and 'subOrganizationName3' in staff and 'subUserPosition3' in staff and (staff.subUserPosition3 == "10" or staff.subUserPosition3 == "11" or staff.subUserPosition3 == "12")
+%}{{ staff.subOrganizationName3 | default('') }} {% endif %}{%
+if 'subOrganization4' in staff and staff.subOrganization4 != "999998" and staff.subOrganization4 != "999996" and 'subOrganizationName4' in staff and 'subUserPosition4' in staff and (staff.subUserPosition4 == "10" or staff.subUserPosition4 == "11" or staff.subUserPosition4 == "12")
+%}{{ staff.subOrganizationName4 | default('') }} {% endif %}{%
+if 'subOrganization5' in staff and staff.subOrganization5 != "999998" and staff.subOrganization5 != "999996" and 'subOrganizationName5' in staff and 'subUserPosition5' in staff and (staff.subUserPosition5 == "10" or staff.subUserPosition5 == "11" or staff.subUserPosition5 == "12")
+%}{{ staff.subOrganizationName5 | default('') }}{% endif %}
+
+{% endif %}
+{% endfor %}

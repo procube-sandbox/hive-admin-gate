@@ -1,0 +1,7 @@
+---
+workdir: "{{ hive_root_dir }}/idm_data_before"
+
+md_ifs:
+- name: _sandboxClasses
+  src: CLASSES-j2.md
+  dest: CLASSES.md

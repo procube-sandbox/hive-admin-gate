@@ -1,0 +1,75 @@
+---
+- name: create application
+  shell: |
+    nsamctl create idp auth.{{domain}}
+  register: create_result
+  args:
+    creates: /opt/wildfly/standalone/deployments/idp.war
+  notify: wildfly configured
+- name: wait a minute for idp.war deployed
+  pause:
+    seconds: 35
+- name: set proto to http
+  shell: |
+    nsamctl proto auth.{{domain}} http
+  when: create_result is changed
+  notify: wildfly configured
+- name: set JDBC Driver
+  shell: |
+    nsamctl config_ds devicemgmt
+  args:
+    creates: /opt/wildfly/modules/org/postgresql/main/module.xml
+  notify: wildfly configured
+# set_ds すると wildfly の cli を呼びますが、結果 /opt/wildfly/standalone/configuration/standalone.xml に書き込まれます。
+# <subsystem xmlns="urn:jboss:domain:datasources:5.0">
+#   <datasources>
+#     ...
+# TODO: 冪等性を XML モジュール https://docs.ansible.com/ansible/latest/collections/community/general/xml_module.html で確保
+- name: put datasource configuration file
+  shell: |
+    nsamctl set_ds idp amdb
+  notify: wildfly configured
+- name: put custom pages
+  copy:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    owner: wildfly
+    group: wildfly
+  with_items:
+#   - src: langmap.json
+#     dest: /opt/shibIdpConf_idp/views/userFiles/
+  - src: default-login.vm # パスワード認証のログインフォームです。ユーザIDとパスワードの入力欄、およびログインボタンが配置されています。
+    dest: /opt/shibIdpConf_idp/views/userFiles/
+  - src: mfa-authn-config.xml
+    dest: /opt/shibIdpConf_idp/conf/authn/mfa-authn-config.xml
+  - src: Totp-flow.xml
+    dest: /opt/shibIdpConf_idp/flows/authn/Totp/Totp-flow.xml
+#   - src: nsam.css # スタイルが定義された css ファイルです。スタイルのカスタマイズでは、このファイルを編集することも、新しい css を新規作成することもできます。
+#     dest: /opt/shibIdpConf_idp/views/userFiles/
+#   - src: default-totp.vm # OTP 認証画面です。OTP 入力欄とログインボタンが配置されています。
+#     dest: /opt/shibIdpConf_idp/views/userFiles/
+#   - src: default-totp-registering-selector.vm # OTP 認証方法をユーザに選択させるための画面ですが、TOTPしかサポートしていないのでスキップするように設定されています。
+#     dest: /opt/shibIdpConf_idp/views/userFiles/
+#   - src: default-totp-register.vm # TOTP 認証（Google認証システムなどを利用した認証）の設定画面です。
+#     dest: /opt/shibIdpConf_idp/views/userFiles/
+#   - src: default-totp-register-complete.vm # OTP 設定が完了した後に遷移する画面です。一定時間経過後、自動 submit するよう javascript が設定されています。
+#     dest: /opt/shibIdpConf_idp/views/userFiles/
+#   - src: logout.vm # ログアウトが実行されたときの画面。「他のSPもログアウトします」ボタンが表示される。
+#     dest: /opt/shibIdpConf_idp/views/
+#   - src: logout-propagate.vm # 「他のSPもログアウト」が押されたときに遷移する画面。下の　logout/propagate.vm　が include されている。
+#     dest: /opt/shibIdpConf_idp/views/
+#   - src: propagate.vm # SPごとのSLO呼び出し、その結果を表示する。
+#     dest: /opt/shibIdpConf_idp/views/logout/
+- name: load consul kv
+  consul_kv:
+    key: "{{ item.key }}"
+    value: "{{ item.value | to_json }}"
+  with_items: "{{ am_kv }}"
+  when: am_kv is defined
+  # no_log: True
+- name: install JDBC Driver
+  shell: |
+    cp /usr/share/NetSoarer/AccessManager/dependencies/wildfly/modules/postgresql/main/postgresql-9.4.1212.jre6.jar /opt/wildfly/standalone/deployments/idp.war/WEB-INF/lib/
+  args:
+    creates: /opt/wildfly/standalone/deployments/idp.war/WEB-INF/lib/postgresql-9.4.1212.jre6.jar
+  notify: wildfly configured

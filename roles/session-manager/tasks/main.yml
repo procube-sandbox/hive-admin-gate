@@ -1,0 +1,70 @@
+---
+- name: install supervisor
+  apk:
+    name:
+    - supervisor
+    update_cache: true
+- name: pip install packages
+  pip:
+    name:
+    - docker
+    - flask
+    - gunicorn
+    - requests
+    - python-memcached
+    state: present
+- name: create directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    mode: 0755
+  loop:
+  - "/root/.docker"
+  # - "/etc/periodic/3min"
+  - "{{ session_manager_path }}"
+  - "{{ supervisord_path }}"
+- name: put entrypoint
+  copy:
+    src: docker-entrypoint.sh
+    dest: "/"
+    mode: 0755
+# - name: Add a cron job
+#   cron:
+#     name: "run every 3 minutes"
+#     minute: "*/3"
+#     job: "run-parts /etc/periodic/3min"
+- name: put ini files
+  copy:
+    src: "{{ item }}"
+    dest: "{{ supervisord_path }}"
+    mode: 0755
+  loop:
+  - crond.ini
+  - gunicorn.ini
+- name: put periodic files
+  copy:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    mode: 0755
+  loop:
+  - src: clean-container.sh
+    dest: "/etc/periodic/15min"
+  - src: clean-connection.sh
+    dest: "/etc/periodic/daily"
+  - src: remove-davfs-volumes.sh
+    dest: "/etc/periodic/daily"
+- name: put session-manager directory
+  copy:
+    src: "session-manager"
+    dest: "/root"
+    mode: 0755
+- name: put insert_hosts.py
+  template:
+    src: insert_hosts.py.j2
+    dest: "{{ session_manager_path }}/insert_hosts.py"
+    mode: 0755
+- name: create link to cacert
+  file:
+    src: /etc/ssl/certs/cacert.pem
+    dest: /root/.docker/ca.pem
+    state: link

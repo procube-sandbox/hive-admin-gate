@@ -1,0 +1,48 @@
+- name: check for user
+  eos_command:
+    commands:
+      - "show running-config | include username {{ cs_obj[loop_protocol ~ 'ID'] }}"
+  vars:
+    ansible_connection: network_cli
+    ansible_network_os: eos
+  register: result_check_user
+
+- name: create user
+  eos_user:
+    name: "{{ cs_obj[loop_protocol ~ 'ID'] }}"
+    configured_password: "{{ cs_obj[loop_protocol ~ 'Password'] }}"
+    update_password: always
+    state: present
+    privilege: 15
+  vars:
+    ansible_connection: network_cli
+    ansible_network_os: eos
+  when: result_check_user.stdout[0] | length == 0
+
+- name: update user
+  eos_user:
+    name: "{{ cs_obj[loop_protocol ~ 'ID'] }}"
+    configured_password: "{{ cs_obj[loop_protocol ~ 'Password'] }}"
+    update_password: always
+    state: present
+  vars:
+    ansible_connection: network_cli
+    ansible_network_os: eos
+  when: result_check_user.stdout[0] | length > 10
+
+- name: remote login linux shell admin-exec
+  expect:
+    command: ssh -o StrictHostKeyChecking=no -l "{{ cs_obj[loop_protocol ~ 'ID'] }}" "{{ hostname }}"
+    responses:
+      ".*[Pp]assword:.*": "{{ cs_obj[loop_protocol ~ 'Password'] }}"
+    timeout: 10
+  changed_when: false
+  vars:
+    ansible_connection: local
+
+- name: config save
+  eos_command:
+    commands: 'write mem'
+  vars:
+    ansible_connection: network_cli
+    ansible_network_os: eos

@@ -1,0 +1,57 @@
+- name: check user
+  cli_command:
+    command: |
+      show running-config | include username {{ cs_obj[loop_protocol ~ 'ID'] }}
+  register: result_check_user
+  vars:
+    ansible_connection: network_cli
+    ansible_network_os: ios
+ 
+- name: Extract lines containing a specific string
+  set_fact:
+    command_for_create_user: username {{ u_name }} privilege 15 role network-admin secret 0 {{ u_pass }}
+    command_for_update_user: username {{ u_name }} secret 0 {{ u_pass }}
+  vars:
+    u_name: "{{ cs_obj[loop_protocol ~ 'ID'] }}"
+    u_pass: "{{ cs_obj[loop_protocol ~ 'Password'] }}"
+
+- name: create user
+  cli_command:
+    command: |
+      configure terminal
+      {{ command_for_create_user }}
+      end
+  vars:
+    ansible_connection: network_cli
+    ansible_network_os: ios
+  when: result_check_user.stdout_lines | length == 0
+
+- name: update user
+  cli_command:
+    command: |
+      configure terminal
+      {{ command_for_update_user }}
+      end
+  vars:
+    ansible_connection: network_cli
+    ansible_network_os: ios
+  when: result_check_user.stdout_lines | length > 0
+
+- name: remote login linux shell admin-exec
+  expect:
+    command: ssh -o StrictHostKeyChecking=no -l "{{ cs_obj[loop_protocol ~ 'ID'] }}" "{{ hostname }}"
+    responses:
+      ".*[Pp]assword:.*": "{{ cs_obj[loop_protocol ~ 'Password'] }}"
+    timeout: 10
+  changed_when: false
+  vars:
+    ansible_connection: local
+
+- name: config save
+  cli_command:
+    command: |
+      write memory
+  vars:
+    ansible_connection: network_cli
+    ansible_network_os: ios
+

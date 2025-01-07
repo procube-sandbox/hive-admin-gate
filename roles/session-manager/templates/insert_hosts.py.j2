@@ -1,0 +1,4 @@
+def insert_hosts(base_urls):
+{% for host in groups['hives'] | intersect(groups[hive_stage]) %}
+    base_urls.append("tcp://{{ host }}:2376")
+{% endfor %}

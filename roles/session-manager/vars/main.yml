@@ -1,0 +1,3 @@
+---
+session_manager_path: "/root/session-manager"
+supervisord_path: "/etc/supervisor.d"

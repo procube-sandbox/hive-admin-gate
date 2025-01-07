@@ -1,0 +1,14 @@
+ddclient_fqdn: "ns{{ inventory_hostname | split('.') | first | regex_replace('^.*hive', '')}}-{{ domain }}"
+# ソフトウェアダウンロードや外部との通信に用いるアカウント情報
+credentials: "{{ lookup('file', lookup('env', 'HOME') + '/.hive/credentials.yml') | from_yaml }}"
+# hive_ext_repositories:
+#   - login_user: "{{ credentials.dockerhub_login_user}}"
+#     password: "{{ credentials.dockerhub_login_password}}"
+
+db_password: "{{lookup('password', hive_context_dir + '/registry_password length=15 chars=ascii_letters,digits')}}1A"
+hive_partition_label: gpt
+hive_interface_name: "System ens192"
+
+hive_kernel_version: 4.18.0-553.27.1.el8_10.x86_64
+hive_drbd_download_url: https://github.com/procube-open/drbd9-rpm/releases/download/Latests/drbd-9.2.11-v9.28.0-4.18.0-553.27.1.el8_10.x86_64.tar.gz
+

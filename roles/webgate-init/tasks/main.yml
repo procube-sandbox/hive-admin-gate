@@ -1,0 +1,10 @@
+---
+- name: inject key-values into consul
+  consul_kv:
+    key: "{{ item.key }}"
+    value: "{{ item.value | to_json }}"
+  with_items: "{{ webgate_kv }}"
+  vars:
+    ansible_python_interpreter: /root/consul/bin/python
+  when: webgate_kv is defined
+

@@ -1,0 +1,76 @@
+---
+# 0-1. HTTP リクエスト本文のペイロードをハッシュ化する。GET リクエストなどペイロードがない場合は、空の文字列で計算する
+- name: Create a hash of the payload
+  aws_authn_sha256:
+    item: "{{ assumeRole_request_body }}"
+  register: result_hashed_payload
+
+# 0-2. リクエストヘッダーとその値のリスト
+- name: Create canonical_headers
+  block:
+  - name: Reset canonical_headers_list_sort
+    set_fact:
+      canonical_headers_list: []
+  - name: Get header's value and set canonical_headers_list
+    vars:
+      requestHeader:
+        Host: "{{ aws_endpoint_iam }}"
+        Content-Type: "application/json;charset=UTF-8"
+      bodyObj: "{{ assumeRole_request_body | combine(requestHeader) }}"
+    set_fact:
+      canonical_headers_list: >-
+        {{ canonical_headers_list | default([]) + [{"name": item | lower, "value": bodyObj[item] | default("") | trim}] }}
+    loop: "{{ signedHeaders }}"
+  - name: Sort canonical_headers_list by lowercase headerName
+    set_fact:
+      canonical_headers_list_sort: "{{ canonical_headers_list | sort(attribute='name') }}"
+  - name: Reset canonical_headers
+    set_fact:
+      canonical_headers: []
+  - name: Format canonical_headers(1)
+    set_fact:
+      canonical_headers: >-
+        {{ canonical_headers | default([]) + [item.name + ':' + item.value] }}
+    loop: "{{ canonical_headers_list_sort }}"
+  - name: Format canonical_headers(2)
+    set_fact:
+      canonical_headers: "{{ canonical_headers | join('\n') + '\n' }}"
+
+# 1. 正規リクエストを作成する
+- name: Create a canonical request
+  vars:
+    http_request_method: "POST"
+    canonical_uri: "/"
+    canonical_query_string: ""
+    canonical_headers: "{{ canonical_headers }}"
+    signed_headers: "{{ amz_headers }}"
+    hashed_payload: "{{ result_hashed_payload.reply }}"
+  set_fact:
+    canonical_request_format: "{{[http_request_method, canonical_uri, canonical_query_string, canonical_headers, signed_headers, hashed_payload] | join('\n')}}"
+
+# 2. 正規リクエストのハッシュを作成する
+- name: Create a hash of the canonical request
+  aws_authn_sha256:
+    item: canonical_request_format
+  register: result_hashed_canonical_request
+
+# 3. 署名文字列を作成する
+- name: Create a string to sign
+  vars:
+    algorithm: AWS4-HMAC-SHA256
+    request_datetime: "{{ amz_date }}"
+    credential_scope: "{{ all_credential_values[1:] | join('/') }}" # No use access_key[0]
+    hashed_canonical_request: "{{ result_hashed_canonical_request.reply }}"
+  set_fact:
+    string_sign: "{{ [algorithm, request_datetime, credential_scope, hashed_canonical_request] | join('\n') }}"
+
+# 4. 署名キーを取得する（SigV4 の署名キーの取得）
+# 5. 署名を計算する
+- name: Derive a signing key
+  aws_authn_signature:
+    key: "{{ token.result[0].SecretAccessKey | default('') }}"
+    dateStamp: "{{ request_date }}"
+    regionName: "{{ aws_region }}"
+    serviceName: "iam"
+    stringToSign: "{{ string_sign }}"
+  register: result_signature

@@ -1,0 +1,83 @@
+---
+# AWS STS で一時的な認証情報を取得する。レスポンスはXML
+- name: Get token of REST API.
+  block:
+  - name: Post to STS.
+    uri:
+      url: "{{ aws_endpoint_sts }}"
+      headers:
+        Content-Type: "application/json;charset=UTF-8"
+      method: POST
+      body:
+        Action: "AssumeRoleWithSAML"
+        Version: "2012-10-17" # APIバージョンとは？
+        RoleArn: "{{ aws_sts_role_getTemporarySecurityCredentials }}"
+        PrincipalArn: "{{ aws_sts_role_principalArn }}"
+        SAMLAssertion: "{{ samlAssertion }}"
+      validate_certs: false # TODO: 証明書は必要か？
+      status_code: 200
+    register: sts_response
+  - name: Parse xml invocation
+    set_fact:
+      token: "{{ sts_response | ansible.netcommon.parse_xml('parser/parse_xml_sts_response.yml') }}"
+
+# 属性値を設定
+- set_fact:
+    Periods: "{{ Periods | default([]) }}"
+- set_fact:
+    resultUsers: "{{ resultUsers | default([]) }}"
+- name: Format periods.
+  set_fact:
+    req_periods: >
+      {{ req_periods | default([]) + [{
+        "validFrom": item.validFrom ~ "T00:00:00+0900",
+        "validUntil": item.validUntil ~ "T23:59:59+0900",
+      }] }}
+  loop: "{{ Periods }}"
+- name: Format workers.
+  set_fact:
+    workers: >
+      {{ workers | default([]) + [item] }}
+  loop: "{{ resultUsers | unique }}"
+
+# 認証情報(X-Amz-*) の作成。CreateRole, AttachedRolePolicy アクション共通　 [TODO]: 日時はそれぞれの実行時に再取得する方がよい？
+- name: Create authentication patameters
+  block:
+  - name: Set request_date (YYYYMMDD)
+    set_fact:
+      request_date: "{{ now(True, '%Y%m%d') }}" # UTC
+  - name: Set credential scope values
+    vars:
+      access_key: "{{ token.result[0].AccessKeyId | default('') }}"
+      date: "{{ request_date }}"
+      region: "{{ aws_region }}"
+      service: "iam"
+      credential_end: "aws4_request"
+    set_fact:
+      all_credential_values: "{{ [access_key, date, region, service, credential_end] }}"
+  - name: Format X-Amz-Credential
+    set_fact:
+      amz_credential: "{{ all_credential_values | join('/') }}"
+  - name: Format X-Amz-Date
+    set_fact:
+      amz_date: "{{ now(True, '%Y%m%dT%H%M%SZ') }}" # UTC
+  - name: Set signedHeaders # 署名計算に使用するヘッダのリスト（大文字小文字を区別する）
+    set_fact:
+      signedHeaders: ['Host', 'Content-Type', 'X-Amz-Algorithm', 'X-Amz-Credential', 'X-Amz-Date', 'X-Amz-Security-Token', 'X-Amz-SignedHeaders']
+  - name: Sort and lowercase signedHeaders
+    set_fact:
+      signedHeaders_sorted: "{{ signedHeaders | map('lower') | sort }}"
+  - name: Format X-Amz-SignedHeaders
+    set_fact:
+      amz_headers: "{{ signedHeaders_sorted | join(';') }}"
+
+# Post role. Creates a new role for own AWS account. 
+- name: Create a role.
+  include: register-workAWS-createRole.yml
+
+# Post policies. Attaches the specified managed policy to the specified IAM role. 
+- name: Attach policies.
+  include: register-workAWS-attachRole.yml
+  with_items: "{{ iamPolicies | unique }}"
+  loop_control:
+    loop_var: policy_name

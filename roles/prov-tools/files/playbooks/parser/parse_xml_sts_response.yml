@@ -1,0 +1,14 @@
+---
+vars:
+  sts_credentials:
+    AccessKeyId: "{{ item.AccessKeyId }}"
+    SecretAccessKey: "{{ item.SecretAccessKey}}"
+    SessionToken: "{{ item.SessionToken}}"
+keys:
+  result:
+    value: "{{ sts_credentials }}"
+    top: AssumeRoleWithSAMLResult # /Credentials
+    items:
+      AccessKeyId: Credentials/AccessKeyId
+      SecretAccessKey: Credentials/SecretAccessKey
+      SessionToken: Credentials/SessionToken

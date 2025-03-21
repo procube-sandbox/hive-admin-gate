@@ -1,0 +1,70 @@
+---
+- name: Block of creating a role.
+  block:
+  - debug: msg="Block START. The roleName is \"{{ id }} \""
+
+  # CreateRole アクションの信頼関係ポリシー作成
+  - name: Format assumeRolePolicyDocument
+    set_fact:
+      assumeRolePolicyDocument: >
+        {{ {
+          "Version": "2012-10-17",
+          "Statement": [{
+            "Effect": "Allow",
+            "Principal": {
+              "AWS": "arn:aws:iam::" ~ accounts['aws_account_id'] ~ ":role/SwitchOnlyRole"
+            },
+            "Action": "sts:AssumeRole",
+            "Condition": {
+              "StringEquals": {
+                "saml:sub": workers | default([])
+              },
+              "DateLessThanEquals": {
+                "aws:CurrentTime": req_periods[0].validFrom
+              },
+              "DateGreaterThanEquals": {
+                "aws:CurrentTime": req_periods[0].validUntil
+              }
+            }
+          }]
+        } }}
+
+  # POST の リクエストボディ(payload) を作成
+  - name: Format payload
+    set_fact:
+      assumeRole_request_body:
+        Action: "CreateRole"
+        Version: "2012-10-17" # APIバージョンとは？
+        RoleName: "{{ aws_iam_role_prefix ~ id }}"
+        Description: "{{ name | default('') }}"
+        AssumeRolePolicyDocument : "{{ assumeRolePolicyDocument }}"
+        Tags.member.1.Key: "ManagedBy"
+        Tags.member.1.Value: "AdminGate"
+        X-Amz-Algorithm: "AWS4-HMAC-SHA256"
+        X-Amz-Credential: "{{ amz_credential }}"
+        X-Amz-Date: "{{ amz_date }}"
+        X-Amz-Security-Token: "{{ token.result[0].SessionToken | default('') }}"
+        X-Amz-SignedHeaders: "{{ amz_headers }}"
+
+  # 1～5. 署名を作成するタスク群を実行
+  - name: Signing requests with temporary security credentials
+    include_tasks:
+      file: register-workAWS-signature.yml
+
+  # 6. リクエストヘッダーに署名(1～5.で計算)を追加する
+  - name: Create authorization header
+    set_fact:
+      authorization_header: "{{ 'Signature=' ~ result_signature.reply }}"
+
+  # REST API へ POST リクエストを送信
+  - name: Post Work
+    uri:
+      url: "{{ aws_endpoint_iam }}"
+      headers:
+        Content-Type: "application/json;charset=UTF-8"
+        Authorization: "{{ authorization_header }}"
+      method: POST
+      body_format: json
+      body: "{{ assumeRole_request_body }}"
+      validate_certs: false
+      status_code: 200

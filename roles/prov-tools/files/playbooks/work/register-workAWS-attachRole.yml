@@ -1,0 +1,41 @@
+---
+- name: Block of Attaching policies.
+  block:
+  - debug: msg="Block START. The policyName is \"{{ policy_name }} \""
+
+  # POST の リクエストボディ(payload) を作成
+  - name: Format payload
+    set_fact:
+      assumeRole_request_body:
+        Action: "AttachRolePolicy"
+        Version: "2012-10-17" # APIバージョンとは？
+        PolicyArn: "{{ aws_iam_policyArn_prefix ~ policy_name }}"
+        RoleName: "{{ aws_iam_role_prefix ~ id }}"
+        X-Amz-Algorithm: "AWS4-HMAC-SHA256"
+        X-Amz-Credential: "{{ amz_credential }}"
+        X-Amz-Date: "{{ amz_date }}"
+        X-Amz-Security-Token: "{{ token.result[0].SessionToken | default('') }}"
+        X-Amz-SignedHeaders: "{{ amz_headers }}"
+
+  # 1～5. 署名を作成するタスク群を実行
+  - name: Signing requests with temporary security credentials
+    include_tasks:
+      file: register-workAWS-signature.yml
+
+  # 6. リクエストヘッダーに署名(1～5.で計算)を追加する
+  - name: Create authorization header
+    set_fact:
+      authorization_header: "{{ 'Signature=' ~ result_signature.reply }}"
+
+  # REST API へ POST リクエストを送信
+  - name: Post Work
+    uri:
+      url: "{{ aws_endpoint_iam }}"
+      headers:
+        Content-Type: "application/json;charset=UTF-8"
+        Authorization: "{{ authorization_header }}"
+      method: POST
+      body_format: json
+      body: "{{ assumeRole_request_body }}"
+      validate_certs: false
+      status_code: 200

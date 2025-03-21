@@ -3,14 +3,29 @@
   hosts: works
   gather_facts: false
   serial: 1
+  vars_files:
+    - ./vars/accounts.yml
   vars:
     ansible_connection: local
     ansible_python_interpreter: /root/prov/bin/python
     username: guacadmin
     password: guacadmin
 
+    aws_region: ap-northeast-1 # Asia Pacific (Tokyo)
+    aws_endpoint_sts: "{{ 'https://sts.' + aws_region + '.amazonaws.com/' }}"
+    aws_endpoint_iam: "{{ 'https://iam.' + aws_region + '.amazonaws.com/' }}"
+    aws_iam_policyArn_prefix: arn:aws:iam::{{ accounts['aws_account_id'] }}:policy/
+    aws_iam_role_prefix: AGM_
+    aws_sts_role_getTemporarySecurityCredentials: arn:aws:iam::{{ accounts['aws_account_id'] }}:role/role_temporary_security # TODO:
+    aws_sts_role_principalArn: arn:aws:iam::{{ accounts['aws_account_id'] }}:saml-provider/SAML-test # TODO:
+
+
   tasks:
   - name: Register work.
     include_tasks:
       file: work/register-work.yml
-    when: status == "waiting"
+    when: status == "waiting" and iamPolicies is not defined
+  - name: Register work for AWS IAM.
+    include_tasks:
+      file: work/register-workAWS.yml
+    when: status == "waiting" and iamPolicies is defined
